@@ -95,10 +95,15 @@ def toggle_dera_tv_pcp(enable: bool):
         # Edit the TV record (first entry)
         wait.until(EC.element_to_be_clickable((By.ID, "editBtn1"))).click()
 
-        # Toggle enable checkbox to the desired state
-        enable_cb = wait.until(EC.presence_of_element_located((By.ID, "Enable")))
-        if enable_cb.is_selected() != enable:
-            enable_cb.click()
+        # Toggle enable switch to the desired state
+        # The switch is a div; "on" state is indicated by the "on" class
+        enable_sw = wait.until(EC.presence_of_element_located((
+            By.CSS_SELECTOR,
+            "#parentalControl_add > div > ul > li:nth-child(1) > div:nth-child(2)",
+        )))
+        is_on = "on" in enable_sw.get_attribute("class").split()
+        if is_on != enable:
+            enable_sw.click()
 
         # Apply
         wait.until(EC.element_to_be_clickable(
