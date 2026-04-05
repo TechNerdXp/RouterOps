@@ -1,5 +1,6 @@
 import os
 import sys
+import traceback
 import winreg
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -9,6 +10,20 @@ from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 
 load_dotenv()
+
+LOG = os.path.join(os.path.expanduser("~"), "RouterOps.log")
+
+
+def log(msg):
+    with open(LOG, "a") as f:
+        f.write(msg + "\n")
+
+
+def safe_quit(driver):
+    try:
+        driver.quit()
+    except Exception:
+        pass
 
 
 def register_context_menu():
@@ -60,7 +75,7 @@ def open_router():
     try:
         _login(driver, WebDriverWait(driver, 10))
     finally:
-        driver.service.stop()  # stop chromedriver process only; Chrome window stays open
+        driver.service.stop()
 
 
 def reboot_router():
@@ -71,53 +86,63 @@ def reboot_router():
     try:
         wait = WebDriverWait(driver, 10)
         _login(driver, wait)
-        ActionChains(driver).move_to_element(driver.find_element(By.ID, "MT")).perform()
+        ActionChains(driver).move_to_element(
+            wait.until(EC.presence_of_element_located((By.ID, "MT")))
+        ).perform()
         driver.find_element(By.XPATH, "//a[contains(text(),'Reboot')]").click()
         wait.until(EC.frame_to_be_available_and_switch_to_it("mainFrame"))
         driver.find_element(By.NAME, "sysSubmit").click()
         driver.switch_to.default_content()
         wait.until(EC.presence_of_element_located((By.XPATH, '//button[text()="OK"]'))).click()
     finally:
-        driver.quit()
+        safe_quit(driver)
 
 
 def toggle_dera_tv_pcp(enable: bool):
     options = webdriver.ChromeOptions()
     options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--window-size=1248,768")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
     driver = webdriver.Chrome(options=options)
     try:
-        wait = WebDriverWait(driver, 10)
+        wait = WebDriverWait(driver, 15)
+        log(f"toggle_dera_tv_pcp: logging in, enable={enable}")
         _login(driver, wait)
 
-        # Security > Parental Control
-        ActionChains(driver).move_to_element(driver.find_element(By.ID, "Sec")).perform()
+        log("toggle_dera_tv_pcp: hovering Security menu")
+        sec = wait.until(EC.presence_of_element_located((By.ID, "Sec")))
+        ActionChains(driver).move_to_element(sec).perform()
+
+        log("toggle_dera_tv_pcp: clicking Parental Control")
         wait.until(EC.element_to_be_clickable((By.ID, "Sec-ParentalControl"))).click()
 
-        # Content is inside mainFrame
+        log("toggle_dera_tv_pcp: switching to mainFrame")
         wait.until(EC.frame_to_be_available_and_switch_to_it("mainFrame"))
 
-        # Edit the TV record (first entry)
+        log("toggle_dera_tv_pcp: clicking editBtn1")
         wait.until(EC.element_to_be_clickable((By.ID, "editBtn1"))).click()
 
-        # Toggle enable switch to the desired state
-        # The switch is a div; "on" state is indicated by the "on" class
+        log("toggle_dera_tv_pcp: finding enable switch")
         enable_sw = wait.until(EC.presence_of_element_located((
             By.CSS_SELECTOR,
             "#parentalControl_add > div > ul > li:nth-child(1) > div:nth-child(2)",
         )))
         classes = enable_sw.get_attribute("class").split()
-        is_on = "off" not in classes  # router uses "off" class when disabled
+        log(f"toggle_dera_tv_pcp: switch classes={classes}")
+        is_on = "off" not in classes
         if is_on != enable:
             enable_sw.click()
 
-        # Apply
+        log("toggle_dera_tv_pcp: clicking Apply")
         wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//button[normalize-space()="Apply"]')
         )).click()
+        log("toggle_dera_tv_pcp: done")
 
+    except Exception:
+        log(f"toggle_dera_tv_pcp ERROR:\n{traceback.format_exc()}")
     finally:
-        driver.quit()
+        safe_quit(driver)
 
 
 def main():
