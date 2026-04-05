@@ -1,0 +1,5 @@
+*.png
+build/
+dist/
+router_settings.spec
+.env
