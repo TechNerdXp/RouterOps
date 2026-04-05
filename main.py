@@ -37,30 +37,58 @@ def hidden_driver():
     return webdriver.Chrome(options=options)
 
 
-def register_context_menu():
-    """Register right-click verbs for RouterOps.exe (HKCU, no admin needed).
+def _reg_delete_tree(hkey, path):
+    try:
+        with winreg.OpenKey(hkey, path, 0, winreg.KEY_ALL_ACCESS) as key:
+            while True:
+                try:
+                    _reg_delete_tree(hkey, path + "\\" + winreg.EnumKey(key, 0))
+                except OSError:
+                    break
+        winreg.DeleteKey(hkey, path)
+    except Exception:
+        pass
 
-    Uses exefile\\shell (the correct path for exe right-click menus) with an
-    AppliesTo filter so the items only appear on RouterOps.exe, not every exe.
-    """
+
+def register_context_menu():
+    """Register a grouped cascading right-click menu on RouterOps.exe (HKCU)."""
     if not getattr(sys, "frozen", False):
         return
     exe = sys.executable
-    root = r"Software\Classes\exefile\shell"
-    verbs = {
-        "RouterOpsReboot":          ("Reboot Router",         f'"{exe}" --reboot'),
-        "RouterOpsEnableTV":        ("Enable Dera TV PCP",    f'"{exe}" --enable-tv'),
-        "RouterOpsDisableTV":       ("Disable Dera TV PCP",   f'"{exe}" --disable-tv'),
-        "RouterOpsEnableGujjar":    ("Enable Gujjar WiFi",    f'"{exe}" --enable-gujjar'),
-        "RouterOpsDisableGujjar":   ("Disable Gujjar WiFi",   f'"{exe}" --disable-gujjar'),
-    }
+    HKCU = winreg.HKEY_CURRENT_USER
+    exefile_shell = r"Software\Classes\exefile\shell"
+
+    # Remove old flat entries from previous versions
+    for old in ["RouterOpsReboot", "RouterOpsEnableTV", "RouterOpsDisableTV",
+                "RouterOpsEnableGujjar", "RouterOpsDisableGujjar"]:
+        _reg_delete_tree(HKCU, f"{exefile_shell}\\{old}")
+
+    # Cascading menu: device name as top-level label
+    device = f"{exefile_shell}\\RouterOpsDevice"
+    shell  = f"{device}\\shell"
+
+    # (verb, label, arg, separator_before)
+    items = [
+        ("1_reboot",        "Reboot Router",        "--reboot",         False),
+        ("2_enabletv",      "Enable Dera TV PCP",   "--enable-tv",      True),
+        ("3_disabletv",     "Disable Dera TV PCP",  "--disable-tv",     False),
+        ("4_enablegujjar",  "Enable Gujjar WiFi",   "--enable-gujjar",  True),
+        ("5_disablegujjar", "Disable Gujjar WiFi",  "--disable-gujjar", False),
+    ]
+
     try:
-        for verb, (label, cmd) in verbs.items():
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{root}\\{verb}") as k:
+        with winreg.CreateKey(HKCU, device) as k:
+            winreg.SetValueEx(k, "MUIVerb",    0, winreg.REG_SZ,  "Huawei LTE CPE B2368-66")
+            winreg.SetValueEx(k, "SubCommands",0, winreg.REG_SZ,  "")
+            winreg.SetValueEx(k, "AppliesTo",  0, winreg.REG_SZ,  'System.FileName:="RouterOps.exe"')
+
+        for verb, label, arg, sep_before in items:
+            with winreg.CreateKey(HKCU, f"{shell}\\{verb}") as k:
                 winreg.SetValueEx(k, "MUIVerb", 0, winreg.REG_SZ, label)
-                winreg.SetValueEx(k, "AppliesTo", 0, winreg.REG_SZ, 'System.FileName:="RouterOps.exe"')
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{root}\\{verb}\\command") as k:
-                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, cmd)
+                if sep_before:
+                    winreg.SetValueEx(k, "CommandFlags", 0, winreg.REG_DWORD, 0x20)
+            with winreg.CreateKey(HKCU, f"{shell}\\{verb}\\command") as k:
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" {arg}')
     except Exception:
         pass
 
