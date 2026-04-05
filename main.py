@@ -84,7 +84,7 @@ def reboot_router():
 def toggle_dera_tv_pcp(enable: bool):
     options = webdriver.ChromeOptions()
     options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--headless=new")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
     driver = webdriver.Chrome(options=options)
     try:
         wait = WebDriverWait(driver, 10)
