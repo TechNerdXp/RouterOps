@@ -12,21 +12,26 @@ load_dotenv()
 
 
 def register_context_menu():
-    """Register all right-click verbs on this exe (HKCU, no admin needed)."""
+    """Register right-click verbs for RouterOps.exe (HKCU, no admin needed).
+
+    Uses exefile\\shell (the correct path for exe right-click menus) with an
+    AppliesTo filter so the items only appear on RouterOps.exe, not every exe.
+    """
     if not getattr(sys, "frozen", False):
         return
     exe = sys.executable
-    shell = r"Software\Classes\Applications\RouterOps.exe\shell"
+    root = r"Software\Classes\exefile\shell"
     verbs = {
-        "reboot":     ("Reboot Router",        f'"{exe}" --reboot'),
-        "enabletv":   ("Enable Dera TV PCP",   f'"{exe}" --enable-tv'),
-        "disabletv":  ("Disable Dera TV PCP",  f'"{exe}" --disable-tv'),
+        "RouterOpsReboot":    ("Reboot Router",       f'"{exe}" --reboot'),
+        "RouterOpsEnableTV":  ("Enable Dera TV PCP",  f'"{exe}" --enable-tv'),
+        "RouterOpsDisableTV": ("Disable Dera TV PCP", f'"{exe}" --disable-tv'),
     }
     try:
         for verb, (label, cmd) in verbs.items():
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{shell}\\{verb}") as k:
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{root}\\{verb}") as k:
                 winreg.SetValueEx(k, "MUIVerb", 0, winreg.REG_SZ, label)
-            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{shell}\\{verb}\\command") as k:
+                winreg.SetValueEx(k, "AppliesTo", 0, winreg.REG_SZ, 'System.FileName:="RouterOps.exe"')
+            with winreg.CreateKey(winreg.HKEY_CURRENT_USER, f"{root}\\{verb}\\command") as k:
                 winreg.SetValueEx(k, "", 0, winreg.REG_SZ, cmd)
     except Exception:
         pass
@@ -101,7 +106,8 @@ def toggle_dera_tv_pcp(enable: bool):
             By.CSS_SELECTOR,
             "#parentalControl_add > div > ul > li:nth-child(1) > div:nth-child(2)",
         )))
-        is_on = "on" in enable_sw.get_attribute("class").split()
+        classes = enable_sw.get_attribute("class").split()
+        is_on = "off" not in classes  # router uses "off" class when disabled
         if is_on != enable:
             enable_sw.click()
 
