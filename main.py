@@ -28,13 +28,13 @@ def safe_quit(driver):
 
 
 def hidden_driver():
-    """Headful Chrome minimized — stable for interactions, invisible to user."""
+    """Headful Chrome in app mode — no address bar/tabs, minimal footprint."""
     options = webdriver.ChromeOptions()
     options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--app=http://192.168.1.1/login.cgi")
+    options.add_argument("--window-size=1248,768")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    driver = webdriver.Chrome(options=options)
-    driver.minimize_window()
-    return driver
+    return webdriver.Chrome(options=options)
 
 
 def register_context_menu():
@@ -104,6 +104,7 @@ def reboot_router():
         driver.find_element(By.NAME, "sysSubmit").click()
         driver.switch_to.default_content()
         wait.until(EC.presence_of_element_located((By.XPATH, '//button[text()="OK"]'))).click()
+        time.sleep(1.5)
     finally:
         safe_quit(driver)
 
@@ -143,7 +144,7 @@ def toggle_dera_tv_pcp(enable: bool):
             (By.XPATH, '//button[normalize-space()="Apply"]')
         )).click()
         log("toggle_dera_tv_pcp: done")
-
+        time.sleep(1.5)
     except Exception:
         log(f"toggle_dera_tv_pcp ERROR:\n{traceback.format_exc()}")
     finally:
@@ -189,7 +190,7 @@ def toggle_gujjar_wifi(enable: bool):
             (By.XPATH, '//button[normalize-space()="Apply"]')
         )).click()
         log("toggle_gujjar_wifi: done")
-
+        time.sleep(1.5)
     except Exception:
         log(f"toggle_gujjar_wifi ERROR:\n{traceback.format_exc()}")
     finally:
