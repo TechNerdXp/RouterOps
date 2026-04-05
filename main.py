@@ -27,6 +27,16 @@ def safe_quit(driver):
         pass
 
 
+def hidden_driver():
+    """Headful Chrome minimized — stable for interactions, invisible to user."""
+    options = webdriver.ChromeOptions()
+    options.add_argument("--ignore-certificate-errors")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    driver = webdriver.Chrome(options=options)
+    driver.minimize_window()
+    return driver
+
+
 def register_context_menu():
     """Register right-click verbs for RouterOps.exe (HKCU, no admin needed).
 
@@ -82,10 +92,7 @@ def open_router():
 
 
 def reboot_router():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--headless=new")
-    driver = webdriver.Chrome(options=options)
+    driver = hidden_driver()
     try:
         wait = WebDriverWait(driver, 10)
         _login(driver, wait)
@@ -102,11 +109,7 @@ def reboot_router():
 
 
 def toggle_dera_tv_pcp(enable: bool):
-    options = webdriver.ChromeOptions()
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--window-size=1248,768")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    driver = webdriver.Chrome(options=options)
+    driver = hidden_driver()
     try:
         wait = WebDriverWait(driver, 15)
         log(f"toggle_dera_tv_pcp: logging in, enable={enable}")
@@ -148,11 +151,7 @@ def toggle_dera_tv_pcp(enable: bool):
 
 
 def toggle_gujjar_wifi(enable: bool):
-    options = webdriver.ChromeOptions()
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--window-size=1248,768")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    driver = webdriver.Chrome(options=options)
+    driver = hidden_driver()
     try:
         wait = WebDriverWait(driver, 15)
         log(f"toggle_gujjar_wifi: logging in, enable={enable}")
