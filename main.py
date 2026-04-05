@@ -122,17 +122,16 @@ def toggle_dera_tv_pcp(enable: bool):
         log("toggle_dera_tv_pcp: clicking editBtn1")
         wait.until(EC.element_to_be_clickable((By.ID, "editBtn1"))).click()
 
-        log("toggle_dera_tv_pcp: finding enable switch")
-        enable_sw = wait.until(EC.presence_of_element_located((
-            By.CSS_SELECTOR,
-            "#parentalControl_add > div > ul > li:nth-child(1) > div:nth-child(2)",
-        )))
-        classes = enable_sw.get_attribute("class").split()
-        log(f"toggle_dera_tv_pcp: switch classes={classes}")
-        is_on = "off" not in classes
-        if is_on != enable:
-            enable_sw.click()
+        # doEdit() opens a zyUiDialog in window.parent, not inside mainFrame
+        driver.switch_to.default_content()
 
+        log("toggle_dera_tv_pcp: finding enableck checkbox")
+        enable_cb = wait.until(EC.presence_of_element_located((By.ID, "enableck")))
+        log(f"toggle_dera_tv_pcp: checkbox selected={enable_cb.is_selected()}")
+        if enable_cb.is_selected() != enable:
+            enable_cb.click()
+
+        # Apply is in the zyUiDialog footer, outside #parentalControl_add
         log("toggle_dera_tv_pcp: clicking Apply")
         wait.until(EC.element_to_be_clickable(
             (By.XPATH, '//button[normalize-space()="Apply"]')
