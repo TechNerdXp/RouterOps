@@ -1,5 +1,6 @@
 import os
 import sys
+import time
 import traceback
 import winreg
 from dotenv import load_dotenv
@@ -37,9 +38,11 @@ def register_context_menu():
     exe = sys.executable
     root = r"Software\Classes\exefile\shell"
     verbs = {
-        "RouterOpsReboot":    ("Reboot Router",       f'"{exe}" --reboot'),
-        "RouterOpsEnableTV":  ("Enable Dera TV PCP",  f'"{exe}" --enable-tv'),
-        "RouterOpsDisableTV": ("Disable Dera TV PCP", f'"{exe}" --disable-tv'),
+        "RouterOpsReboot":          ("Reboot Router",         f'"{exe}" --reboot'),
+        "RouterOpsEnableTV":        ("Enable Dera TV PCP",    f'"{exe}" --enable-tv'),
+        "RouterOpsDisableTV":       ("Disable Dera TV PCP",   f'"{exe}" --disable-tv'),
+        "RouterOpsEnableGujjar":    ("Enable Gujjar WiFi",    f'"{exe}" --enable-gujjar'),
+        "RouterOpsDisableGujjar":   ("Disable Gujjar WiFi",   f'"{exe}" --disable-gujjar'),
     }
     try:
         for verb, (label, cmd) in verbs.items():
@@ -144,6 +147,56 @@ def toggle_dera_tv_pcp(enable: bool):
         safe_quit(driver)
 
 
+def toggle_gujjar_wifi(enable: bool):
+    options = webdriver.ChromeOptions()
+    options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--window-size=1248,768")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    driver = webdriver.Chrome(options=options)
+    try:
+        wait = WebDriverWait(driver, 15)
+        log(f"toggle_gujjar_wifi: logging in, enable={enable}")
+        _login(driver, wait)
+
+        # Network Setting > Wireless
+        log("toggle_gujjar_wifi: navigating to Wireless")
+        net = wait.until(EC.presence_of_element_located((By.ID, "Net")))
+        ActionChains(driver).move_to_element(net).perform()
+        wait.until(EC.element_to_be_clickable((By.ID, "Net-WLAN"))).click()
+        wait.until(EC.frame_to_be_available_and_switch_to_it("mainFrame"))
+
+        # More AP tab
+        log("toggle_gujjar_wifi: clicking More AP tab")
+        wait.until(EC.element_to_be_clickable((By.ID, "t1"))).click()
+        time.sleep(1)
+
+        # Edit Gujjar (value="2")
+        log("toggle_gujjar_wifi: clicking Gujjar edit")
+        wait.until(EC.element_to_be_clickable(
+            (By.XPATH, '//a[@class="edit"][@value="2"]')
+        )).click()
+
+        # Dialog opens in parent window
+        driver.switch_to.default_content()
+
+        log("toggle_gujjar_wifi: finding wlanEnable checkbox")
+        cb = wait.until(EC.presence_of_element_located((By.ID, "wlanEnable")))
+        log(f"toggle_gujjar_wifi: checkbox selected={cb.is_selected()}")
+        if cb.is_selected() != enable:
+            cb.click()
+
+        log("toggle_gujjar_wifi: clicking Apply")
+        wait.until(EC.element_to_be_clickable(
+            (By.XPATH, '//button[normalize-space()="Apply"]')
+        )).click()
+        log("toggle_gujjar_wifi: done")
+
+    except Exception:
+        log(f"toggle_gujjar_wifi ERROR:\n{traceback.format_exc()}")
+    finally:
+        safe_quit(driver)
+
+
 def main():
     register_context_menu()
     if "--reboot" in sys.argv:
@@ -152,6 +205,10 @@ def main():
         toggle_dera_tv_pcp(True)
     elif "--disable-tv" in sys.argv:
         toggle_dera_tv_pcp(False)
+    elif "--enable-gujjar" in sys.argv:
+        toggle_gujjar_wifi(True)
+    elif "--disable-gujjar" in sys.argv:
+        toggle_gujjar_wifi(False)
     else:
         open_router()
 
