@@ -2,7 +2,6 @@ import os
 import sys
 import time
 import traceback
-import webbrowser
 import winreg
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -236,7 +235,14 @@ def toggle_gujjar_wifi(enable: bool):
 
 
 def speed_check():
-    webbrowser.open("https://fast.com")
+    options = webdriver.ChromeOptions()
+    options.add_argument("--ignore-certificate-errors")
+    options.add_argument("--app=https://fast.com")
+    options.add_argument("--window-size=1200,700")
+    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    options.add_experimental_option("detach", True)
+    driver = webdriver.Chrome(options=options)
+    driver.service.stop()
 
 
 def main():
