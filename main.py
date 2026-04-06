@@ -24,12 +24,8 @@ def safe_quit(driver):
 
 
 def hidden_driver():
-    """Headful Chrome in app mode — no address bar/tabs, minimal footprint."""
-    options = webdriver.ChromeOptions()
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--app=http://192.168.1.1/login.cgi")
+    options = _chrome_options("http://192.168.1.1/login.cgi")
     options.add_argument("--window-size=1248,768")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
     return webdriver.Chrome(options=options)
 
 
@@ -204,6 +200,22 @@ def register_jump_list():
         pass
 
 
+def _chrome_options(app_url=None):
+    opts = webdriver.ChromeOptions()
+    if app_url:
+        opts.add_argument(f"--app={app_url}")
+    opts.add_argument("--ignore-certificate-errors")
+    opts.add_argument("--no-first-run")
+    opts.add_argument("--no-default-browser-check")
+    opts.add_argument("--disable-extensions")
+    opts.add_argument("--disable-sync")
+    opts.add_argument("--disable-background-networking")
+    opts.add_argument("--disable-client-side-phishing-detection")
+    opts.add_argument("--disable-default-apps")
+    opts.add_experimental_option("excludeSwitches", ["enable-automation"])
+    return opts
+
+
 def _login(driver, wait):
     driver.get("http://192.168.1.1/login.cgi")
     wait.until(EC.visibility_of_element_located((By.ID, "username"))).send_keys(
@@ -217,11 +229,8 @@ def _login(driver, wait):
 
 
 def open_router():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--app=http://192.168.1.1/login.cgi")
+    options = _chrome_options("http://192.168.1.1/login.cgi")
     options.add_argument("--window-size=1248,768")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
     options.add_experimental_option("detach", True)
     driver = webdriver.Chrome(options=options)
     try:
@@ -286,11 +295,8 @@ def _do_toggle_gujjar_wifi(driver, wait, enable: bool):
 
 
 def speed_check():
-    options = webdriver.ChromeOptions()
-    options.add_argument("--ignore-certificate-errors")
-    options.add_argument("--app=https://fast.com")
+    options = _chrome_options("https://fast.com")
     options.add_argument("--window-size=1200,700")
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
     driver = webdriver.Chrome(options=options)
     try:
         time.sleep(60)
