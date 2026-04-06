@@ -11,7 +11,10 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.action_chains import ActionChains
 
-load_dotenv()
+load_dotenv(os.path.join(os.path.dirname(sys.executable)
+                         if getattr(sys, "frozen", False)
+                         else os.path.dirname(os.path.abspath(__file__)),
+                         ".env"))
 
 LOG = os.path.join(
     os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
