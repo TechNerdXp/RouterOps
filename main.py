@@ -151,14 +151,46 @@ def register_jump_list():
     from win32com.propsys import propsys, pscon
     import pythoncom
 
-    tasks = [
-        ("Reboot Router",       "--reboot"),
-        ("Enable Dera TV PCP",  "--enable-tv"),
-        ("Disable Dera TV PCP", "--disable-tv"),
-        ("Enable Gujjar WiFi",  "--enable-gujjar"),
-        ("Disable Gujjar WiFi", "--disable-gujjar"),
-        ("Speed Check",         "--speed-check"),
+    groups = [
+        ("Router", [
+            ("Reboot Router",       "--reboot"),
+        ]),
+        ("Dera TV PCP", [
+            ("Enable Dera TV PCP",  "--enable-tv"),
+            ("Disable Dera TV PCP", "--disable-tv"),
+        ]),
+        ("Gujjar WiFi", [
+            ("Enable Gujjar WiFi",  "--enable-gujjar"),
+            ("Disable Gujjar WiFi", "--disable-gujjar"),
+        ]),
+        ("Utilities", [
+            ("Speed Check",         "--speed-check"),
+        ]),
     ]
+
+    def make_link(title, arg):
+        link = pythoncom.CoCreateInstance(
+            shell.CLSID_ShellLink, None,
+            pythoncom.CLSCTX_INPROC_SERVER,
+            shell.IID_IShellLink,
+        )
+        link.SetPath(exe)
+        link.SetArguments(arg)
+        link.SetIconLocation(exe, 0)
+        store = link.QueryInterface(propsys.IID_IPropertyStore)
+        store.SetValue(pscon.PKEY_Title, propsys.PROPVARIANTType(title))
+        store.Commit()
+        return link
+
+    def make_collection(tasks):
+        coll = pythoncom.CoCreateInstance(
+            shell.CLSID_EnumerableObjectCollection, None,
+            pythoncom.CLSCTX_INPROC_SERVER,
+            shell.IID_IObjectCollection,
+        )
+        for title, arg in tasks:
+            coll.AddObject(make_link(title, arg))
+        return coll
 
     try:
         cdl = pythoncom.CoCreateInstance(
@@ -169,29 +201,9 @@ def register_jump_list():
         cdl.SetAppID(AUMID)
         cdl.BeginList()
 
-        coll = pythoncom.CoCreateInstance(
-            shell.CLSID_EnumerableObjectCollection, None,
-            pythoncom.CLSCTX_INPROC_SERVER,
-            shell.IID_IObjectCollection,
-        )
+        for group_name, tasks in groups:
+            cdl.AppendCategory(group_name, make_collection(tasks))
 
-        for title, arg in tasks:
-            link = pythoncom.CoCreateInstance(
-                shell.CLSID_ShellLink, None,
-                pythoncom.CLSCTX_INPROC_SERVER,
-                shell.IID_IShellLink,
-            )
-            link.SetPath(exe)
-            link.SetArguments(arg)
-            link.SetIconLocation(exe, 0)
-
-            store = link.QueryInterface(propsys.IID_IPropertyStore)
-            store.SetValue(pscon.PKEY_Title, propsys.PROPVARIANTType(title))
-            store.Commit()
-
-            coll.AddObject(link)
-
-        cdl.AddUserTasks(coll)
         cdl.CommitList()
     except Exception:
         pass
