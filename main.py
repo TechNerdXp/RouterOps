@@ -1,3 +1,4 @@
+import ctypes
 import os
 import sys
 import time
@@ -98,6 +99,68 @@ def register_context_menu():
             winreg.SetValueEx(k, "AppliesTo", 0, winreg.REG_SZ, 'System.FileName:="RouterOps.exe"')
         with winreg.CreateKey(HKCU, speed + r"\command") as k:
             winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" --speed-check')
+    except Exception:
+        pass
+
+
+AUMID = "TechNerdXp.RouterOps"
+
+
+def register_jump_list():
+    """Register taskbar Jump List tasks (right-click on pinned exe)."""
+    ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(AUMID)
+
+    if not getattr(sys, "frozen", False):
+        return
+
+    exe = sys.executable
+
+    from win32com.shell import shell
+    from win32com.propsys import propsys, pscon
+    import pythoncom
+
+    tasks = [
+        ("Reboot Router",       "--reboot"),
+        ("Enable Dera TV PCP",  "--enable-tv"),
+        ("Disable Dera TV PCP", "--disable-tv"),
+        ("Enable Gujjar WiFi",  "--enable-gujjar"),
+        ("Disable Gujjar WiFi", "--disable-gujjar"),
+        ("Speed Check",         "--speed-check"),
+    ]
+
+    try:
+        cdl = pythoncom.CoCreateInstance(
+            shell.CLSID_DestinationList, None,
+            pythoncom.CLSCTX_INPROC_SERVER,
+            shell.IID_ICustomDestinationList,
+        )
+        cdl.SetAppID(AUMID)
+        cdl.BeginList()
+
+        coll = pythoncom.CoCreateInstance(
+            shell.CLSID_EnumerableObjectCollection, None,
+            pythoncom.CLSCTX_INPROC_SERVER,
+            shell.IID_IObjectCollection,
+        )
+
+        for title, arg in tasks:
+            link = pythoncom.CoCreateInstance(
+                shell.CLSID_ShellLink, None,
+                pythoncom.CLSCTX_INPROC_SERVER,
+                shell.IID_IShellLink,
+            )
+            link.SetPath(exe)
+            link.SetArguments(arg)
+            link.SetIconLocation(exe, 0)
+
+            store = link.QueryInterface(propsys.IID_IPropertyStore)
+            store.SetValue(pscon.PKEY_Title, propsys.PROPVARIANTType(title))
+            store.Commit()
+
+            coll.AddObject(link)
+
+        cdl.AddUserTasks(coll)
+        cdl.CommitList()
     except Exception:
         pass
 
@@ -247,6 +310,7 @@ def speed_check():
 
 def main():
     register_context_menu()
+    register_jump_list()
     if "--reboot" in sys.argv:
         reboot_router()
     elif "--enable-tv" in sys.argv:
