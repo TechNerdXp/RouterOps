@@ -77,13 +77,10 @@ def register_context_menu():
 
     # (verb, label, arg, separator_before)
     items = [
-        ("1_reboot",        "Reboot Router",        "--reboot",         False),
-        ("2_enabletv",      "Enable Dera TV PCP",   "--enable-tv",      True),
-        ("3_disabletv",     "Disable Dera TV PCP",  "--disable-tv",     False),
-        ("4_enablegujjar",  "Enable Gujjar WiFi",   "--enable-gujjar",  True),
-        ("5_disablegujjar", "Disable Gujjar WiFi",  "--disable-gujjar", False),
-        ("6_gueston",       "Guest Mode On",        "--guest-on",       True),
-        ("7_guestoff",      "Guest Mode Off",       "--guest-off",      False),
+        ("1_reboot",    "Reboot Router",  "--reboot",    False),
+        ("2_gueston",   "Guest Mode On",  "--guest-on",  True),
+        ("3_guestoff",  "Guest Mode Off", "--guest-off", False),
+        ("4_speedcheck","Speed Check",    "--speed-check",True),
     ]
 
     try:
@@ -101,13 +98,7 @@ def register_context_menu():
             with winreg.CreateKey(HKCU, f"{shell}\\{verb}\\command") as k:
                 winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" {arg}')
 
-        # Flat item outside the device submenu
-        speed = f"{exefile_shell}\\RouterOpsSpeedCheck"
-        with winreg.CreateKey(HKCU, speed) as k:
-            winreg.SetValueEx(k, "MUIVerb",   0, winreg.REG_SZ, "Speed Check")
-            winreg.SetValueEx(k, "AppliesTo", 0, winreg.REG_SZ, 'System.FileName:="RouterOps.exe"')
-        with winreg.CreateKey(HKCU, speed + r"\command") as k:
-            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" --speed-check')
+        _reg_delete_tree(HKCU, f"{exefile_shell}\\RouterOpsSpeedCheck")
     except Exception:
         pass
 
@@ -212,18 +203,12 @@ def register_jump_list():
         cdl.BeginList()
 
         items = [
-            make_link("Reboot Router",       "--reboot"),
+            make_link("Reboot Router",  "--reboot"),
             make_separator(),
-            make_link("Enable Dera TV PCP",  "--enable-tv"),
-            make_link("Disable Dera TV PCP", "--disable-tv"),
+            make_link("Guest Mode On",  "--guest-on"),
+            make_link("Guest Mode Off", "--guest-off"),
             make_separator(),
-            make_link("Enable Gujjar WiFi",  "--enable-gujjar"),
-            make_link("Disable Gujjar WiFi", "--disable-gujjar"),
-            make_separator(),
-            make_link("Guest Mode On",       "--guest-on"),
-            make_link("Guest Mode Off",      "--guest-off"),
-            make_separator(),
-            make_link("Speed Check",         "--speed-check"),
+            make_link("Speed Check",    "--speed-check"),
         ]
         cdl.AddUserTasks(make_collection(items))
         cdl.CommitList()
@@ -315,29 +300,6 @@ def _do_toggle_gujjar_wifi(driver, wait, enable: bool):
     time.sleep(1.5)
 
 
-def toggle_dera_tv_pcp(enable: bool):
-    driver = hidden_driver()
-    try:
-        wait = WebDriverWait(driver, 15)
-        _login(driver, wait)
-        _do_toggle_dera_tv_pcp(driver, wait, enable)
-    except Exception:
-        log(f"toggle_dera_tv_pcp ERROR:\n{traceback.format_exc()}")
-    finally:
-        safe_quit(driver)
-
-
-def toggle_gujjar_wifi(enable: bool):
-    driver = hidden_driver()
-    try:
-        wait = WebDriverWait(driver, 15)
-        _login(driver, wait)
-        _do_toggle_gujjar_wifi(driver, wait, enable)
-    except Exception:
-        log(f"toggle_gujjar_wifi ERROR:\n{traceback.format_exc()}")
-    finally:
-        safe_quit(driver)
-
 
 def speed_check():
     options = webdriver.ChromeOptions()
@@ -371,14 +333,6 @@ def main():
     register_jump_list()
     if "--reboot" in sys.argv:
         reboot_router()
-    elif "--enable-tv" in sys.argv:
-        toggle_dera_tv_pcp(True)
-    elif "--disable-tv" in sys.argv:
-        toggle_dera_tv_pcp(False)
-    elif "--enable-gujjar" in sys.argv:
-        toggle_gujjar_wifi(True)
-    elif "--disable-gujjar" in sys.argv:
-        toggle_gujjar_wifi(False)
     elif "--guest-on" in sys.argv:
         guest_mode(True)
     elif "--guest-off" in sys.argv:
