@@ -18,7 +18,13 @@ ROUTER_PASSWORD=your_password
 ## Build
 
 ```
-pyinstaller --name RouterOps main.py --icon=icon-active.png --noconsole --onefile
+pyinstaller --name RouterOps main.py --icon=icon.png --noconsole --onefile
+```
+
+###OR 
+
+```
+pyinstaller RouterOps.spec --clean
 ```
 
 > Requires Chrome. Selenium Manager handles the driver automatically.
