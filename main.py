@@ -151,21 +151,13 @@ def register_jump_list():
     from win32com.propsys import propsys, pscon
     import pythoncom
 
-    groups = [
-        ("Router", [
-            ("Reboot Router",       "--reboot"),
-        ]),
-        ("Dera TV PCP", [
-            ("Enable Dera TV PCP",  "--enable-tv"),
-            ("Disable Dera TV PCP", "--disable-tv"),
-        ]),
-        ("Gujjar WiFi", [
-            ("Enable Gujjar WiFi",  "--enable-gujjar"),
-            ("Disable Gujjar WiFi", "--disable-gujjar"),
-        ]),
-        ("Utilities", [
-            ("Speed Check",         "--speed-check"),
-        ]),
+    tasks = [
+        ("Reboot Router",           "--reboot"),
+        ("TV PCP  ›  Enable",       "--enable-tv"),
+        ("TV PCP  ›  Disable",      "--disable-tv"),
+        ("Gujjar WiFi  ›  Enable",  "--enable-gujjar"),
+        ("Gujjar WiFi  ›  Disable", "--disable-gujjar"),
+        ("Speed Check",             "--speed-check"),
     ]
 
     def make_link(title, arg):
@@ -201,8 +193,7 @@ def register_jump_list():
         cdl.SetAppID(AUMID)
         cdl.BeginList()
 
-        for group_name, tasks in groups:
-            cdl.AppendCategory(group_name, make_collection(tasks))
+        cdl.AddUserTasks(make_collection(tasks))
 
         cdl.CommitList()
     except Exception:
