@@ -124,7 +124,7 @@ def _stamp_pinned_shortcut():
                 pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink,
             )
             pf = link.QueryInterface(pythoncom.IID_IPersistFile)
-            pf.Load(lnk, 0)
+            pf.Load(lnk, 2)  # STGM_READWRITE
             path, _ = link.GetPath(shell.SLGP_RAWPATH)
             if os.path.basename(path).lower() == "routerops.exe":
                 store = link.QueryInterface(propsys.IID_IPropertyStore)
@@ -140,6 +140,7 @@ def _stamp_pinned_shortcut():
 def register_jump_list():
     """Register taskbar Jump List tasks (right-click on pinned exe)."""
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(AUMID)
+    _stamp_pinned_shortcut()
 
     if not getattr(sys, "frozen", False):
         return
@@ -149,8 +150,6 @@ def register_jump_list():
     from win32com.shell import shell
     from win32com.propsys import propsys, pscon
     import pythoncom
-
-    _stamp_pinned_shortcut()
 
     tasks = [
         ("Reboot Router",       "--reboot"),
