@@ -275,42 +275,52 @@ def reboot_router():
         safe_quit(driver)
 
 
+def _do_toggle_dera_tv_pcp(driver, wait, enable: bool):
+    log(f"toggle_dera_tv_pcp: hovering Security menu, enable={enable}")
+    sec = wait.until(EC.presence_of_element_located((By.ID, "Sec")))
+    ActionChains(driver).move_to_element(sec).perform()
+    wait.until(EC.element_to_be_clickable((By.ID, "Sec-ParentalControl"))).click()
+    wait.until(EC.frame_to_be_available_and_switch_to_it("mainFrame"))
+    wait.until(EC.element_to_be_clickable((By.ID, "editBtn1"))).click()
+    driver.switch_to.default_content()
+    enable_cb = wait.until(EC.presence_of_element_located((By.ID, "enableck")))
+    if enable_cb.is_selected() != enable:
+        enable_cb.click()
+    wait.until(EC.element_to_be_clickable(
+        (By.XPATH, '//button[normalize-space()="Apply"]')
+    )).click()
+    log("toggle_dera_tv_pcp: done")
+    time.sleep(1.5)
+
+
+def _do_toggle_gujjar_wifi(driver, wait, enable: bool):
+    log(f"toggle_gujjar_wifi: navigating to Wireless, enable={enable}")
+    net = wait.until(EC.presence_of_element_located((By.ID, "Net")))
+    ActionChains(driver).move_to_element(net).perform()
+    wait.until(EC.element_to_be_clickable((By.ID, "Net-WLAN"))).click()
+    wait.until(EC.frame_to_be_available_and_switch_to_it("mainFrame"))
+    wait.until(EC.element_to_be_clickable((By.ID, "t1"))).click()
+    time.sleep(1)
+    wait.until(EC.element_to_be_clickable(
+        (By.XPATH, '//a[@class="edit"][@value="2"]')
+    )).click()
+    driver.switch_to.default_content()
+    cb = wait.until(EC.presence_of_element_located((By.ID, "wlanEnable")))
+    if cb.is_selected() != enable:
+        cb.click()
+    wait.until(EC.element_to_be_clickable(
+        (By.XPATH, '//button[normalize-space()="Apply"]')
+    )).click()
+    log("toggle_gujjar_wifi: done")
+    time.sleep(1.5)
+
+
 def toggle_dera_tv_pcp(enable: bool):
     driver = hidden_driver()
     try:
         wait = WebDriverWait(driver, 15)
-        log(f"toggle_dera_tv_pcp: logging in, enable={enable}")
         _login(driver, wait)
-
-        log("toggle_dera_tv_pcp: hovering Security menu")
-        sec = wait.until(EC.presence_of_element_located((By.ID, "Sec")))
-        ActionChains(driver).move_to_element(sec).perform()
-
-        log("toggle_dera_tv_pcp: clicking Parental Control")
-        wait.until(EC.element_to_be_clickable((By.ID, "Sec-ParentalControl"))).click()
-
-        log("toggle_dera_tv_pcp: switching to mainFrame")
-        wait.until(EC.frame_to_be_available_and_switch_to_it("mainFrame"))
-
-        log("toggle_dera_tv_pcp: clicking editBtn1")
-        wait.until(EC.element_to_be_clickable((By.ID, "editBtn1"))).click()
-
-        # doEdit() opens a zyUiDialog in window.parent, not inside mainFrame
-        driver.switch_to.default_content()
-
-        log("toggle_dera_tv_pcp: finding enableck checkbox")
-        enable_cb = wait.until(EC.presence_of_element_located((By.ID, "enableck")))
-        log(f"toggle_dera_tv_pcp: checkbox selected={enable_cb.is_selected()}")
-        if enable_cb.is_selected() != enable:
-            enable_cb.click()
-
-        # Apply is in the zyUiDialog footer, outside #parentalControl_add
-        log("toggle_dera_tv_pcp: clicking Apply")
-        wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//button[normalize-space()="Apply"]')
-        )).click()
-        log("toggle_dera_tv_pcp: done")
-        time.sleep(1.5)
+        _do_toggle_dera_tv_pcp(driver, wait, enable)
     except Exception:
         log(f"toggle_dera_tv_pcp ERROR:\n{traceback.format_exc()}")
     finally:
@@ -321,42 +331,8 @@ def toggle_gujjar_wifi(enable: bool):
     driver = hidden_driver()
     try:
         wait = WebDriverWait(driver, 15)
-        log(f"toggle_gujjar_wifi: logging in, enable={enable}")
         _login(driver, wait)
-
-        # Network Setting > Wireless
-        log("toggle_gujjar_wifi: navigating to Wireless")
-        net = wait.until(EC.presence_of_element_located((By.ID, "Net")))
-        ActionChains(driver).move_to_element(net).perform()
-        wait.until(EC.element_to_be_clickable((By.ID, "Net-WLAN"))).click()
-        wait.until(EC.frame_to_be_available_and_switch_to_it("mainFrame"))
-
-        # More AP tab
-        log("toggle_gujjar_wifi: clicking More AP tab")
-        wait.until(EC.element_to_be_clickable((By.ID, "t1"))).click()
-        time.sleep(1)
-
-        # Edit Gujjar (value="2")
-        log("toggle_gujjar_wifi: clicking Gujjar edit")
-        wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//a[@class="edit"][@value="2"]')
-        )).click()
-
-        # Dialog opens in parent window
-        driver.switch_to.default_content()
-
-        log("toggle_gujjar_wifi: finding wlanEnable checkbox")
-        cb = wait.until(EC.presence_of_element_located((By.ID, "wlanEnable")))
-        log(f"toggle_gujjar_wifi: checkbox selected={cb.is_selected()}")
-        if cb.is_selected() != enable:
-            cb.click()
-
-        log("toggle_gujjar_wifi: clicking Apply")
-        wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//button[normalize-space()="Apply"]')
-        )).click()
-        log("toggle_gujjar_wifi: done")
-        time.sleep(1.5)
+        _do_toggle_gujjar_wifi(driver, wait, enable)
     except Exception:
         log(f"toggle_gujjar_wifi ERROR:\n{traceback.format_exc()}")
     finally:
@@ -377,9 +353,17 @@ def speed_check():
 
 
 def guest_mode(enable: bool):
-    """Enable guest mode: Gujjar WiFi on + TV PCP off (reverse for disable)."""
-    toggle_gujjar_wifi(enable)
-    toggle_dera_tv_pcp(not enable)
+    """One login: Gujjar WiFi on + TV PCP off (or reverse)."""
+    driver = hidden_driver()
+    try:
+        wait = WebDriverWait(driver, 15)
+        _login(driver, wait)
+        _do_toggle_gujjar_wifi(driver, wait, enable)
+        _do_toggle_dera_tv_pcp(driver, wait, not enable)
+    except Exception:
+        log(f"guest_mode ERROR:\n{traceback.format_exc()}")
+    finally:
+        safe_quit(driver)
 
 
 def main():
