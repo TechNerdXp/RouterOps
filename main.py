@@ -2,7 +2,6 @@ import ctypes
 import os
 import sys
 import time
-import traceback
 import winreg
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -15,17 +14,6 @@ load_dotenv(os.path.join(
     getattr(sys, "_MEIPASS", os.path.dirname(os.path.abspath(__file__))),
     ".env",
 ))
-
-LOG = os.path.join(
-    os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
-    else os.path.expanduser("~"),
-    "RouterOps.log",
-)
-
-
-def log(msg):
-    with open(LOG, "a") as f:
-        f.write(msg + "\n")
 
 
 def safe_quit(driver):
@@ -261,7 +249,6 @@ def reboot_router():
 
 
 def _do_toggle_dera_tv_pcp(driver, wait, enable: bool):
-    log(f"toggle_dera_tv_pcp: hovering Security menu, enable={enable}")
     sec = wait.until(EC.presence_of_element_located((By.ID, "Sec")))
     ActionChains(driver).move_to_element(sec).perform()
     wait.until(EC.element_to_be_clickable((By.ID, "Sec-ParentalControl"))).click()
@@ -274,12 +261,10 @@ def _do_toggle_dera_tv_pcp(driver, wait, enable: bool):
     wait.until(EC.element_to_be_clickable(
         (By.XPATH, '//button[normalize-space()="Apply"]')
     )).click()
-    log("toggle_dera_tv_pcp: done")
     time.sleep(1.5)
 
 
 def _do_toggle_gujjar_wifi(driver, wait, enable: bool):
-    log(f"toggle_gujjar_wifi: navigating to Wireless, enable={enable}")
     net = wait.until(EC.presence_of_element_located((By.ID, "Net")))
     ActionChains(driver).move_to_element(net).perform()
     wait.until(EC.element_to_be_clickable((By.ID, "Net-WLAN"))).click()
@@ -296,7 +281,6 @@ def _do_toggle_gujjar_wifi(driver, wait, enable: bool):
     wait.until(EC.element_to_be_clickable(
         (By.XPATH, '//button[normalize-space()="Apply"]')
     )).click()
-    log("toggle_gujjar_wifi: done")
     time.sleep(1.5)
 
 
@@ -323,7 +307,7 @@ def guest_mode(enable: bool):
         _do_toggle_gujjar_wifi(driver, wait, enable)
         _do_toggle_dera_tv_pcp(driver, wait, not enable)
     except Exception:
-        log(f"guest_mode ERROR:\n{traceback.format_exc()}")
+        pass
     finally:
         safe_quit(driver)
 
