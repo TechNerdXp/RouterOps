@@ -364,9 +364,11 @@ def speed_check():
     options.add_argument("--app=https://fast.com")
     options.add_argument("--window-size=1200,700")
     options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    options.add_experimental_option("detach", True)
     driver = webdriver.Chrome(options=options)
-    driver.service.stop()
+    try:
+        time.sleep(60)
+    finally:
+        safe_quit(driver)
 
 
 def main():
