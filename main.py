@@ -13,7 +13,11 @@ from selenium.webdriver.common.action_chains import ActionChains
 
 load_dotenv()
 
-LOG = os.path.join(os.path.expanduser("~"), "RouterOps.log")
+LOG = os.path.join(
+    os.path.dirname(sys.executable) if getattr(sys, "frozen", False)
+    else os.path.expanduser("~"),
+    "RouterOps.log",
+)
 
 
 def log(msg):
