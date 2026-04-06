@@ -106,6 +106,37 @@ def register_context_menu():
 AUMID = "TechNerdXp.RouterOps"
 
 
+def _stamp_pinned_shortcut():
+    """Set our AUMID on the pinned taskbar shortcut so Jump List tasks show up."""
+    import glob
+    from win32com.shell import shell
+    from win32com.propsys import propsys, pscon
+    import pythoncom
+
+    taskbar = os.path.join(
+        os.environ.get("APPDATA", ""),
+        r"Microsoft\Internet Explorer\Quick Launch\User Pinned\TaskBar",
+    )
+    for lnk in glob.glob(os.path.join(taskbar, "*.lnk")):
+        try:
+            link = pythoncom.CoCreateInstance(
+                shell.CLSID_ShellLink, None,
+                pythoncom.CLSCTX_INPROC_SERVER, shell.IID_IShellLink,
+            )
+            pf = link.QueryInterface(pythoncom.IID_IPersistFile)
+            pf.Load(lnk, 0)
+            path, _ = link.GetPath(shell.SLGP_RAWPATH)
+            if os.path.basename(path).lower() == "routerops.exe":
+                store = link.QueryInterface(propsys.IID_IPropertyStore)
+                store.SetValue(pscon.PKEY_AppUserModel_ID,
+                               propsys.PROPVARIANTType(AUMID))
+                store.Commit()
+                pf.Save(lnk, True)
+                break
+        except Exception:
+            pass
+
+
 def register_jump_list():
     """Register taskbar Jump List tasks (right-click on pinned exe)."""
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID(AUMID)
@@ -118,6 +149,8 @@ def register_jump_list():
     from win32com.shell import shell
     from win32com.propsys import propsys, pscon
     import pythoncom
+
+    _stamp_pinned_shortcut()
 
     tasks = [
         ("Reboot Router",       "--reboot"),
