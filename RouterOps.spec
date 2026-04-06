@@ -5,7 +5,7 @@ a = Analysis(
     ['main.py'],
     pathex=[],
     binaries=[],
-    datas=[],
+    datas=[('.env', '.')],
     hiddenimports=["win32timezone"],
     hookspath=[],
     hooksconfig={},
