@@ -2,6 +2,7 @@ import os
 import sys
 import time
 import traceback
+import webbrowser
 import winreg
 from dotenv import load_dotenv
 from selenium import webdriver
@@ -77,10 +78,11 @@ def register_context_menu():
     ]
 
     try:
+        # Device-specific cascading submenu
         with winreg.CreateKey(HKCU, device) as k:
-            winreg.SetValueEx(k, "MUIVerb",    0, winreg.REG_SZ,  "Huawei LTE CPE B2368-66")
-            winreg.SetValueEx(k, "SubCommands",0, winreg.REG_SZ,  "")
-            winreg.SetValueEx(k, "AppliesTo",  0, winreg.REG_SZ,  'System.FileName:="RouterOps.exe"')
+            winreg.SetValueEx(k, "MUIVerb",     0, winreg.REG_SZ,   "Huawei LTE CPE B2368-66")
+            winreg.SetValueEx(k, "SubCommands", 0, winreg.REG_SZ,   "")
+            winreg.SetValueEx(k, "AppliesTo",   0, winreg.REG_SZ,   'System.FileName:="RouterOps.exe"')
 
         for verb, label, arg, sep_before in items:
             with winreg.CreateKey(HKCU, f"{shell}\\{verb}") as k:
@@ -89,6 +91,14 @@ def register_context_menu():
                     winreg.SetValueEx(k, "CommandFlags", 0, winreg.REG_DWORD, 0x20)
             with winreg.CreateKey(HKCU, f"{shell}\\{verb}\\command") as k:
                 winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" {arg}')
+
+        # Flat item outside the device submenu
+        speed = f"{exefile_shell}\\RouterOpsSpeedCheck"
+        with winreg.CreateKey(HKCU, speed) as k:
+            winreg.SetValueEx(k, "MUIVerb",   0, winreg.REG_SZ, "Speed Check")
+            winreg.SetValueEx(k, "AppliesTo", 0, winreg.REG_SZ, 'System.FileName:="RouterOps.exe"')
+        with winreg.CreateKey(HKCU, speed + r"\command") as k:
+            winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" --speed-check')
     except Exception:
         pass
 
@@ -225,6 +235,10 @@ def toggle_gujjar_wifi(enable: bool):
         safe_quit(driver)
 
 
+def speed_check():
+    webbrowser.open("https://fast.com")
+
+
 def main():
     register_context_menu()
     if "--reboot" in sys.argv:
@@ -237,6 +251,8 @@ def main():
         toggle_gujjar_wifi(True)
     elif "--disable-gujjar" in sys.argv:
         toggle_gujjar_wifi(False)
+    elif "--speed-check" in sys.argv:
+        speed_check()
     else:
         open_router()
 
