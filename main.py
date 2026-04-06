@@ -151,15 +151,6 @@ def register_jump_list():
     from win32com.propsys import propsys, pscon
     import pythoncom
 
-    tasks = [
-        ("Reboot Router",           "--reboot"),
-        ("TV PCP  ›  Enable",       "--enable-tv"),
-        ("TV PCP  ›  Disable",      "--disable-tv"),
-        ("Gujjar WiFi  ›  Enable",  "--enable-gujjar"),
-        ("Gujjar WiFi  ›  Disable", "--disable-gujjar"),
-        ("Speed Check",             "--speed-check"),
-    ]
-
     def make_link(title, arg):
         link = pythoncom.CoCreateInstance(
             shell.CLSID_ShellLink, None,
@@ -174,14 +165,28 @@ def register_jump_list():
         store.Commit()
         return link
 
-    def make_collection(tasks):
+    def make_separator():
+        link = pythoncom.CoCreateInstance(
+            shell.CLSID_ShellLink, None,
+            pythoncom.CLSCTX_INPROC_SERVER,
+            shell.IID_IShellLink,
+        )
+        store = link.QueryInterface(propsys.IID_IPropertyStore)
+        pk = propsys.PSGetPropertyKeyFromName(
+            "System.AppUserModel.IsDestListSeparator"
+        )
+        store.SetValue(pk, propsys.PROPVARIANTType(True, pythoncom.VT_BOOL))
+        store.Commit()
+        return link
+
+    def make_collection(items):
         coll = pythoncom.CoCreateInstance(
             shell.CLSID_EnumerableObjectCollection, None,
             pythoncom.CLSCTX_INPROC_SERVER,
             shell.IID_IObjectCollection,
         )
-        for title, arg in tasks:
-            coll.AddObject(make_link(title, arg))
+        for item in items:
+            coll.AddObject(item)
         return coll
 
     try:
@@ -191,10 +196,24 @@ def register_jump_list():
             shell.IID_ICustomDestinationList,
         )
         cdl.SetAppID(AUMID)
+        try:
+            cdl.DeleteList(AUMID)
+        except Exception:
+            pass
         cdl.BeginList()
 
-        cdl.AddUserTasks(make_collection(tasks))
-
+        items = [
+            make_link("Reboot Router",       "--reboot"),
+            make_separator(),
+            make_link("Enable Dera TV PCP",  "--enable-tv"),
+            make_link("Disable Dera TV PCP", "--disable-tv"),
+            make_separator(),
+            make_link("Enable Gujjar WiFi",  "--enable-gujjar"),
+            make_link("Disable Gujjar WiFi", "--disable-gujjar"),
+            make_separator(),
+            make_link("Speed Check",         "--speed-check"),
+        ]
+        cdl.AddUserTasks(make_collection(items))
         cdl.CommitList()
     except Exception:
         pass
