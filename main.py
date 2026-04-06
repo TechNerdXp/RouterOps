@@ -82,6 +82,8 @@ def register_context_menu():
         ("3_disabletv",     "Disable Dera TV PCP",  "--disable-tv",     False),
         ("4_enablegujjar",  "Enable Gujjar WiFi",   "--enable-gujjar",  True),
         ("5_disablegujjar", "Disable Gujjar WiFi",  "--disable-gujjar", False),
+        ("6_gueston",       "Guest Mode On",        "--guest-on",       True),
+        ("7_guestoff",      "Guest Mode Off",       "--guest-off",      False),
     ]
 
     try:
@@ -217,6 +219,9 @@ def register_jump_list():
             make_separator(),
             make_link("Enable Gujjar WiFi",  "--enable-gujjar"),
             make_link("Disable Gujjar WiFi", "--disable-gujjar"),
+            make_separator(),
+            make_link("Guest Mode On",       "--guest-on"),
+            make_link("Guest Mode Off",      "--guest-off"),
             make_separator(),
             make_link("Speed Check",         "--speed-check"),
         ]
@@ -371,6 +376,12 @@ def speed_check():
         safe_quit(driver)
 
 
+def guest_mode(enable: bool):
+    """Enable guest mode: Gujjar WiFi on + TV PCP off (reverse for disable)."""
+    toggle_gujjar_wifi(enable)
+    toggle_dera_tv_pcp(not enable)
+
+
 def main():
     register_context_menu()
     register_jump_list()
@@ -384,6 +395,10 @@ def main():
         toggle_gujjar_wifi(True)
     elif "--disable-gujjar" in sys.argv:
         toggle_gujjar_wifi(False)
+    elif "--guest-on" in sys.argv:
+        guest_mode(True)
+    elif "--guest-off" in sys.argv:
+        guest_mode(False)
     elif "--speed-check" in sys.argv:
         speed_check()
     else:
