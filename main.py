@@ -66,10 +66,20 @@ def _chrome_options(app_url=None):
     return opts
 
 
+def _find_chromedriver():
+    """Return cached ChromeDriver path to bypass Selenium Manager network check."""
+    import glob
+    cache = os.path.join(os.path.expanduser("~"), ".cache", "selenium", "chromedriver")
+    hits = glob.glob(os.path.join(cache, "**", "chromedriver.exe"), recursive=True)
+    return max(hits) if hits else None
+
+
 def _driver(url, size="1248,768"):
+    from selenium.webdriver.chrome.service import Service
     opts = _chrome_options(url)
     opts.add_argument(f"--window-size={size}")
-    return webdriver.Chrome(options=opts)
+    cd = _find_chromedriver()
+    return webdriver.Chrome(options=opts, service=Service(cd) if cd else None)
 
 
 def _reg_delete_tree(hkey, path):
@@ -240,10 +250,12 @@ def _huawei_login(driver, wait):
 
 
 def open_router():
+    from selenium.webdriver.chrome.service import Service
     opts = _chrome_options("http://192.168.1.1/login.cgi")
     opts.add_argument("--window-size=1248,768")
     opts.add_experimental_option("detach", True)
-    driver = webdriver.Chrome(options=opts)
+    cd = _find_chromedriver()
+    driver = webdriver.Chrome(options=opts, service=Service(cd) if cd else None)
     try:
         _huawei_login(driver, WebDriverWait(driver, 10))
     finally:
