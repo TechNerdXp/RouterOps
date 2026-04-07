@@ -25,7 +25,6 @@ DEVICES = [
             ("Reboot Huawei",  "--reboot-huawei", False),
             ("Guest Mode On",  "--guest-on",      True),
             ("Guest Mode Off", "--guest-off",     False),
-            ("Huawei Speed Check", "--speed-check", True),
         ],
     ),
     (
@@ -35,6 +34,11 @@ DEVICES = [
             ("Reboot TP-Link", "--reboot-tplink", False),
         ],
     ),
+]
+
+# standalone — not tied to any single device
+UTILITIES = [
+    ("Speed Check", "--speed-check"),
 ]
 
 AUMID = "TechNerdXp.RouterOps"
@@ -115,8 +119,8 @@ def register_context_menu():
             shell_path  = f"{device_path}\\shell"
 
             with winreg.CreateKey(HKCU, device_path) as k:
-                winreg.SetValueEx(k, "MUIVerb",     0, winreg.REG_SZ,   dev_label)
-                winreg.SetValueEx(k, "SubCommands", 0, winreg.REG_SZ,   "")
+                winreg.SetValueEx(k, "MUIVerb",     0, winreg.REG_SZ, dev_label)
+                winreg.SetValueEx(k, "SubCommands", 0, winreg.REG_SZ, "")
                 winreg.SetValueEx(k, "AppliesTo",   0, winreg.REG_SZ,
                                   'System.FileName:="RouterOps.exe"')
 
@@ -128,6 +132,20 @@ def register_context_menu():
                         winreg.SetValueEx(k, "CommandFlags", 0, winreg.REG_DWORD, 0x20)
                 with winreg.CreateKey(HKCU, f"{shell_path}\\{verb}\\command") as k:
                     winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" {arg}')
+
+        # Standalone utilities — flat entries outside device submenus
+        util_path = f"{exefile_shell}\\RouterOpsUtils"
+        with winreg.CreateKey(HKCU, util_path) as k:
+            winreg.SetValueEx(k, "MUIVerb",     0, winreg.REG_SZ, "Network")
+            winreg.SetValueEx(k, "SubCommands", 0, winreg.REG_SZ, "")
+            winreg.SetValueEx(k, "AppliesTo",   0, winreg.REG_SZ,
+                              'System.FileName:="RouterOps.exe"')
+        for i, (task_label, arg) in enumerate(UTILITIES):
+            verb = f"{i + 1}_{arg.lstrip('-').replace('-', '_')}"
+            with winreg.CreateKey(HKCU, f"{util_path}\\shell\\{verb}") as k:
+                winreg.SetValueEx(k, "MUIVerb", 0, winreg.REG_SZ, task_label)
+            with winreg.CreateKey(HKCU, f"{util_path}\\shell\\{verb}\\command") as k:
+                winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" {arg}')
     except Exception:
         pass
 
@@ -224,10 +242,12 @@ def register_jump_list():
         for i, (dev_label, _reg_key, tasks) in enumerate(DEVICES):
             if i > 0:
                 items.append(make_separator())
-            for j, (task_label, arg, _sep) in enumerate(tasks):
+            for task_label, arg, _sep in tasks:
                 items.append(make_link(task_label, arg))
-                # separator between task groups within a device (where sep_before is set)
-                # already handled by visual grouping across devices
+        if UTILITIES:
+            items.append(make_separator())
+            for task_label, arg in UTILITIES:
+                items.append(make_link(task_label, arg))
 
         cdl.AddUserTasks(make_collection(items))
         cdl.CommitList()
