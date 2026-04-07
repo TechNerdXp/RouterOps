@@ -67,11 +67,11 @@ def _chrome_options(app_url=None):
 
 
 def _find_chromedriver():
-    """Return cached ChromeDriver path to bypass Selenium Manager network check."""
+    """Return the most-recently-used cached ChromeDriver, bypassing Selenium Manager."""
     import glob
     cache = os.path.join(os.path.expanduser("~"), ".cache", "selenium", "chromedriver")
     hits = glob.glob(os.path.join(cache, "**", "chromedriver.exe"), recursive=True)
-    return max(hits) if hits else None
+    return max(hits, key=os.path.getmtime) if hits else None
 
 
 def _driver(url, size="1248,768"):
