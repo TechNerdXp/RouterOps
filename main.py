@@ -25,7 +25,7 @@ DEVICES = [
             ("Reboot Huawei",  "--reboot-huawei", False),
             ("Guest Mode On",  "--guest-on",      True),
             ("Guest Mode Off", "--guest-off",     False),
-            ("Speed Check",    "--speed-check",   True),
+            ("Huawei Speed Check", "--speed-check", True),
         ],
     ),
     (
