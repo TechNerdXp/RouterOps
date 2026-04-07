@@ -22,7 +22,7 @@ DEVICES = [
         "Huawei LTE CPE B2368-66",
         "RouterOpsHuawei",
         [
-            ("Reboot Router",  "--reboot-huawei", False),
+            ("Reboot Huawei",  "--reboot-huawei", False),
             ("Guest Mode On",  "--guest-on",      True),
             ("Guest Mode Off", "--guest-off",     False),
             ("Speed Check",    "--speed-check",   True),
@@ -32,7 +32,7 @@ DEVICES = [
         "TP-Link TL-WR844N",
         "RouterOpsTplink",
         [
-            ("Reboot Router",  "--reboot-tplink", False),
+            ("Reboot TP-Link", "--reboot-tplink", False),
         ],
     ),
 ]
@@ -333,10 +333,10 @@ def guest_mode(enable: bool):
 
 def _tplink_login(driver, wait):
     driver.get("http://tplinkwifi.net")
-    wait.until(EC.visibility_of_element_located((By.ID, "password"))).send_keys(
-        os.getenv("ROUTER_PASSWORD")
-    )
-    wait.until(EC.element_to_be_clickable((By.ID, "login-btn"))).click()
+    wait.until(EC.visibility_of_element_located(
+        (By.CSS_SELECTOR, "input[type='password']")
+    )).send_keys(os.getenv("ROUTER_PASSWORD"))
+    wait.until(EC.element_to_be_clickable((By.ID, "local-login-button"))).click()
     wait.until(EC.url_contains("#"))
 
 
@@ -346,9 +346,8 @@ def reboot_tplink():
         wait = WebDriverWait(driver, 15)
         _tplink_login(driver, wait)
         driver.get("http://tplinkwifi.net/#reboot")
-        wait.until(EC.element_to_be_clickable(
-            (By.XPATH, '//button[normalize-space()="REBOOT"]')
-        )).click()
+        wait.until(EC.element_to_be_clickable((By.ID, "reboot-button"))).click()
+        wait.until(EC.element_to_be_clickable((By.ID, "reboot-confirm-msg-btn-ok"))).click()
         time.sleep(1.5)
     finally:
         safe_quit(driver)
