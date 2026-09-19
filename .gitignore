@@ -1,0 +1,9 @@
+# Screenshots and scratch images, but not the app icon: RouterOps.spec needs
+# icon.png at build time, so a clone without it cannot build.
+*.png
+!icon.png
+
+build/
+dist/
+.env
+__pycache__/
