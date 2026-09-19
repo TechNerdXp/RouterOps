@@ -607,9 +607,16 @@ class Monitor:
 
         if fault == "session":
             self._evictions += 1
-            self._skip = min(2 ** (self._evictions - 1), 8)
-            self._log.info("router is someone else's — backing off %d tick%s",
-                           self._skip, "" if self._skip == 1 else "s")
+            # The first loss costs nothing: the firmware drops sessions on its
+            # own and the next login frees the slot and takes a fresh one, so
+            # waiting would only add 30 seconds of blindness to something that
+            # heals itself. It is a loss that *keeps* happening that means
+            # somebody else is really using the router, and that is what backs
+            # off — doubling, to a ceiling of eight ticks.
+            self._skip = 0 if self._evictions == 1 else min(2 ** (self._evictions - 2), 8)
+            if self._skip:
+                self._log.info("router is someone else's — backing off %d tick%s",
+                               self._skip, "" if self._skip == 1 else "s")
         elif fault is None:
             if self._evictions:
                 self._log.info("router free again after %d eviction%s",
@@ -826,14 +833,17 @@ class TrayWindow:
                 self._refresh_icon()
                 return 0
             if msg == WM_APP_TRAY:
-                # Left opens the router, right opens the menu. Giving both
-                # buttons the menu left the left one with nothing of its own to
-                # do, and the portal is the thing you actually came to the icon
-                # for — it should not cost two clicks. No double-click gesture,
-                # because it cannot coexist with a single-click action: the
-                # first click would fire the portal before the second arrived.
+                # Left opens the history, right opens the menu. The history is
+                # what you reach for the moment the icon changes colour, and it
+                # is free — no router session, no traffic, and it works while
+                # the line is down. The portal would be the obvious choice but
+                # it is the rarer errand once the tray is telling you what is
+                # happening, and a speed test spends real bandwidth, which is
+                # too much to fire on a stray click. No double-click gesture:
+                # it cannot coexist with a single-click action, because the
+                # first click fires before the second arrives.
                 if lparam == WM_LBUTTONUP:
-                    launch(None)
+                    launch("--history")
                 elif lparam == WM_RBUTTONUP:
                     self._show_menu()
                 return 0

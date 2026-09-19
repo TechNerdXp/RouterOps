@@ -779,15 +779,17 @@ def signal_history(days=7):
     down, which is exactly when someone would want to look at it.
     """
     import history
-    rows = history.load(history.path_for(LOG_DIR), days)
-    out  = os.path.join(LOG_DIR, "signal-history.html")
+    rows   = history.load(history.path_for(LOG_DIR), days)
+    speeds = history.load_speed(history.speed_path_for(LOG_DIR), days)
+    out    = os.path.join(LOG_DIR, "signal-history.html")
     try:
         with open(out, "w", encoding="utf-8") as fh:
-            fh.write(history.render(rows, days))
+            fh.write(history.render(rows, days, speeds))
     except OSError as exc:
         _alert(f"Could not write the history page:\n\n{exc}")
         return
-    log.info("signal history: %d samples over %d days", len(rows), days)
+    log.info("signal history: %d samples, %d speed checks, over %d days",
+             len(rows), len(speeds), days)
 
     # Opened detached, and then this process is done. The window clock exists
     # for windows pointed at the router — a driven flow still going six minutes
@@ -809,12 +811,48 @@ def signal_history(days=7):
     log.info("signal history: window opened; leaving it to the reader")
 
 
+def _read_fast_com(driver, timeout=120):
+    """The download figure fast.com settles on, in Mbps. None if it never does.
+
+    Waiting for the 'succeeded' class rather than just reading #speed-value
+    matters: until the test finishes that element is a live counter climbing
+    towards the real number, so reading it early records a figure from halfway
+    up the ramp and quietly libels the connection.
+    """
+    WebDriverWait(driver, timeout).until(
+        lambda d: "succeeded" in (d.find_element(
+            By.ID, "speed-progress-indicator").get_attribute("class") or "")
+    )
+    value = driver.find_element(By.ID, "speed-value").text.strip()
+    units = driver.find_element(By.ID, "speed-units").text.strip().lower()
+    mbps = float(value)
+    if units.startswith("kbps"):
+        mbps /= 1000.0
+    elif units.startswith("gbps"):
+        mbps *= 1000.0
+    return mbps
+
+
 def speed_check():
     # fast.com settles in well under a minute; the rest of the window's life
     # belongs to the user, up to the shared limit
     driver = _driver("https://fast.com", size="1200,700")
     clock = _WindowClock(driver)
     try:
+        # Keep the figure. One speed test answers "is it slow right now"; a
+        # run of them answers "is this line worth what we pay for it", and
+        # that is the question that comes up after a bad week.
+        try:
+            import history
+            mbps = _read_fast_com(driver)
+            history.record_speed(history.speed_path_for(LOG_DIR), mbps)
+            log.info("speed check: %.1f Mbps (%s)", mbps,
+                     "healthy" if mbps >= history.HEALTHY_MBPS else "below par")
+        except Exception as exc:
+            # Never let bookkeeping spoil the thing the user actually clicked:
+            # the window is already open and showing them the answer.
+            log.info("speed check: could not read the result (%s)",
+                     exc.__class__.__name__)
         clock.hold()
     finally:
         clock.stop()

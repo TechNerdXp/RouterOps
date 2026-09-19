@@ -104,8 +104,21 @@ class Assessment:
 
 
 def _cell_of(sample):
-    """The identity of the cell we are camped on."""
-    return (sample.get("enb"), sample.get("pci"), sample.get("earfcn"))
+    """The cell we are camped on, or None when we are not camped on one.
+
+    The modem reports eNB 0 and EARFCN 0 while it is detached. That is the
+    absence of a cell, not a different one, so reading it as a handover turns
+    every service drop into a spurious pair of "moved to a different cell"
+    lines — one on the way out and one on the way back — and buries the real
+    handover in the noise. Observed exactly that during a 53-minute outage:
+    eight cell-change lines, of which one was a genuine move.
+    """
+    enb = (sample.get("enb") or "").strip()
+    pci = (sample.get("pci") or "").strip()
+    earfcn = (sample.get("earfcn") or "").strip()
+    if not (enb and pci and earfcn) or enb == "0" or earfcn == "0":
+        return None
+    return (enb, pci, earfcn)
 
 
 def assess(sample, internet, fault=None):
@@ -224,7 +237,7 @@ def transitions(now, prev, now_sample, prev_sample):
     # bars, but a different cell with a worse path. That is what makes one
     # request succeed and the next one fail, and without this it is invisible.
     old_cell, new_cell = _cell_of(prev_sample), _cell_of(now_sample)
-    if old_cell != new_cell and all(new_cell) and all(old_cell):
+    if old_cell and new_cell and old_cell != new_cell:
         events.append((
             "cell",
             "Moved to a different cell — eNB %s→%s, PCI %s→%s, EARFCN %s→%s" % (

@@ -27,9 +27,81 @@ FIELDS = ("ts", "state", "bars", "rsrp", "sinr", "rsrq", "rssi",
 KEEP_DAYS = 30
 DAY = 86400
 
+# What a speed check has to reach for the line to be worth having. Chosen as
+# the point where calls stop being painful and ordinary use stops waiting on
+# the network — below it the connection still works, it just costs you time.
+HEALTHY_MBPS = 15.0
+
+SPEED_FIELDS = ("ts", "mbps")
+
 
 def path_for(log_dir):
     return os.path.join(log_dir, "signal-history.csv")
+
+
+def speed_path_for(log_dir):
+    return os.path.join(log_dir, "speed-history.csv")
+
+
+# ── speed checks ──────────────────────────────────────────────────────────────
+# One line per check, kept beside the signal log rather than inside it: these
+# arrive when someone runs a speed test, not on a cadence, and mixing an
+# irregular series into a regular one makes both harder to read.
+
+def record_speed(csv_path, mbps, now=None):
+    """Append one speed-check result. Never raises."""
+    try:
+        new = not os.path.exists(csv_path)
+        with open(csv_path, "a", encoding="utf-8", newline="") as fh:
+            if new:
+                fh.write(",".join(SPEED_FIELDS) + "\n")
+            fh.write("%d,%.2f\n" % (int(now if now is not None else time.time()), mbps))
+    except OSError:
+        pass
+
+
+def load_speed(csv_path, days, now=None):
+    """(timestamp, mbps) pairs within the window, oldest first."""
+    cutoff = int(now if now is not None else time.time()) - days * DAY
+    out = []
+    try:
+        with open(csv_path, encoding="utf-8") as fh:
+            fh.readline()
+            for line in fh:
+                parts = line.rstrip("\n").split(",")
+                if len(parts) != 2:
+                    continue
+                try:
+                    ts, mbps = int(parts[0]), float(parts[1])
+                except ValueError:
+                    continue
+                if ts >= cutoff:
+                    out.append((ts, mbps))
+    except OSError:
+        return []
+    return out
+
+
+def speed_summary(rows):
+    """What the recent checks say about the line, or None if there are none.
+
+    The average is over the window being displayed rather than all time: a good
+    month in the spring says nothing about whether calls will work this evening.
+    """
+    if not rows:
+        return None
+    values = [m for _ts, m in rows]
+    healthy = [m for m in values if m >= HEALTHY_MBPS]
+    return {
+        "count":   len(values),
+        "latest":  values[-1],
+        "average": sum(values) / len(values),
+        "best":    max(values),
+        "worst":   min(values),
+        "healthy_share": 100.0 * len(healthy) / len(values),
+        "verdict": ("healthy" if sum(values) / len(values) >= HEALTHY_MBPS
+                    else "questionable"),
+    }
 
 
 # ── writing ───────────────────────────────────────────────────────────────────
@@ -233,7 +305,7 @@ def _fmt_minutes(n):
     return "%dh %02dm" % (n // 60, n % 60)
 
 
-def render(rows, days_requested):
+def render(rows, days_requested, speed_rows=None):
     days, profile = summarise(rows)
     days = days[-days_requested:] if days_requested else days
 
@@ -265,6 +337,9 @@ def render(rows, days_requested):
         '<div class="hlab">%02d</div><div class="htip">%02d:00 — %.0f%% down</div></div>'
         % (min(100.0, profile[h]), h, h, profile[h]) for h in range(24))
 
+    speed  = _speed_block(speed_rows or [])
+    health = _health_block(days, speed_rows or [])
+
     headline = ("Not enough data yet." if worst is None or not any(profile) else
                 "Worst hour is %02d:00 — the link was unusable %.0f%% of the time "
                 "it was watched in that hour." % (worst, profile[worst]))
@@ -278,9 +353,118 @@ def render(rows, days_requested):
                'Monitor running and check back.</p>',
         bars=bars,
         headline=headline,
+        speed=speed,
+        health=health,
         span="%d day%s" % (len(days), "" if len(days) == 1 else "s"),
         generated=time.strftime("%a %d %b %H:%M"),
     )
+
+
+def health_score(days, speed_rows):
+    """One number for "is this connection any good", 0-100, or None.
+
+    Two things decide whether a line is worth its money, and they fail
+    independently: it can be fast and keep dropping, or rock solid and too slow
+    to hold a call. So the score is both, and both are shown beside it — a
+    single figure with its workings hidden is a figure nobody trusts or can act
+    on.
+
+      availability  share of the watched minutes the link was actually usable
+      speed         average of the speed checks against the HEALTHY_MBPS bar,
+                    capped at 100 so one very fast day cannot pay for a week of
+                    outages
+
+    Weighted toward availability, because a connection that is not there is
+    worth nothing regardless of how fast it is when it returns.
+    """
+    watched = sum(d["seen_minutes"] for d in days)
+    if not watched and not speed_rows:
+        return None
+
+    availability = (100.0 * sum(d["seen_minutes"] - d["down_minutes"] for d in days)
+                    / watched) if watched else None
+
+    # Hitting HEALTHY_MBPS scores 75, not 100. Meeting the bar means calls
+    # work and nothing waits on the network — that is *good*, and a line with
+    # real headroom above it deserves to score higher than one scraping past.
+    summary = speed_summary(speed_rows)
+    speed = (min(100.0, 75.0 * summary["average"] / HEALTHY_MBPS)
+             if summary else None)
+
+    if availability is None:
+        score = speed
+    elif speed is None:
+        score = availability
+    else:
+        score = 0.6 * availability + 0.4 * speed
+    return {
+        "score": round(score),
+        "availability": availability,
+        "speed": speed,
+        "mbps": summary["average"] if summary else None,
+        "checks": summary["count"] if summary else 0,
+        "watched_minutes": watched,
+    }
+
+
+def _health_block(days, speed_rows):
+    h = health_score(days, speed_rows)
+    if h is None:
+        return ""
+    score = h["score"]
+    band = "good" if score >= 75 else ("warn" if score >= 50 else "bad")
+    parts = []
+    if h["availability"] is not None:
+        parts.append("up %.1f%% of the %s watched" % (
+            h["availability"], _fmt_minutes(h["watched_minutes"])))
+    if h["mbps"] is not None:
+        parts.append("%.1f Mbps average over %d check%s" % (
+            h["mbps"], h["checks"], "" if h["checks"] == 1 else "s"))
+    else:
+        parts.append("no speed checks yet")
+    return ('<div class="health"><div class="score %s">%d</div>'
+            '<div class="hmeta"><div class="hlabel">Network health</div>'
+            '<div class="hparts">%s</div></div></div>'
+            % (band, score, " · ".join(parts)))
+
+
+def _speed_block(rows):
+    """The speed-check section: the verdict first, the readings under it."""
+    summary = speed_summary(rows)
+    if not summary:
+        return ('<div class="headline">No speed checks recorded yet. Run '
+                'Speed Check and the results collect here.</div>')
+
+    verdict = summary["verdict"]
+    line = ("Average <b>%.1f Mbps</b> over %d check%s — <span class=\"%s\">%s</span>. "
+            "%.0f%% of them reached %g Mbps." % (
+                summary["average"], summary["count"],
+                "" if summary["count"] == 1 else "s",
+                "good" if verdict == "healthy" else "bad",
+                "healthy" if verdict == "healthy"
+                else "questionable, calls and loading will suffer",
+                summary["healthy_share"], HEALTHY_MBPS))
+
+    # The bars are scaled to the tallest reading, so the line marking the bar
+    # has to sit at the same scale or it is decoration pretending to be a
+    # measurement.
+    top = max(summary["best"], HEALTHY_MBPS)
+    mark = 100.0 * HEALTHY_MBPS / top
+    bars = "".join(
+        '<div class="sp"><div class="spbar %s" style="height:%.1f%%"></div>'
+        '<div class="sptip">%s — %.1f Mbps</div></div>'
+        % ("good" if m >= HEALTHY_MBPS else "bad",
+           min(100.0, 100.0 * m / top),
+           time.strftime("%d %b %H:%M", time.localtime(ts)), m)
+        for ts, m in rows[-40:])
+
+    return ('<div class="headline">%s</div>'
+            '<div class="speeds"><div class="threshold" style="bottom:%.1f%%">'
+            '</div>%s</div>'
+            '<div class="spfoot">latest %.1f · best %.1f · worst %.1f Mbps '
+            '· dashed line is %g</div>'
+            % (line, mark, bars, summary["latest"], summary["best"],
+               summary["worst"], HEALTHY_MBPS))
 
 
 _TEMPLATE = """<!DOCTYPE html>
@@ -321,6 +505,33 @@ _TEMPLATE = """<!DOCTYPE html>
           border-radius:3px; font-size:11px; white-space:nowrap;
           opacity:0; pointer-events:none; transition:opacity .12s; }
   .hr:hover .htip { opacity:1; }
+  .health { display:flex; align-items:center; gap:16px; margin:14px 0 20px; }
+  .score { font-size:34px; font-weight:600; line-height:1; min-width:72px;
+           text-align:center; padding:12px 10px; border-radius:8px;
+           font-variant-numeric:tabular-nums; }
+  .score.good { background:#1E3A20; color:#7FD184; }
+  .score.warn { background:#3D3216; color:#F0C060; }
+  .score.bad  { background:#3B1B1B; color:#EE8E8B; }
+  .hlabel { font-size:13px; font-weight:600; color:#DCDCDC; }
+  .hparts { font-size:12px; color:#8A8A8A; margin-top:2px; }
+  .good { color:#6FBF73; }
+  .bad  { color:#E87B78; }
+  .speeds { display:flex; gap:4px; align-items:flex-end; height:90px;
+            padding-left:108px; position:relative; margin-top:12px; }
+  .threshold { position:absolute; left:108px; right:0; bottom:0; border-top:1px
+               dashed #5A5A5A; pointer-events:none; }
+  .sp { flex:1; max-width:34px; display:flex; flex-direction:column;
+        justify-content:flex-end; height:100%; position:relative; }
+  .spbar { width:100%; border-radius:2px 2px 0 0; min-height:2px; }
+  .spbar.good { background:linear-gradient(#4CAF50,#357A38); }
+  .spbar.bad  { background:linear-gradient(#E53935,#8E1B1B); }
+  .sptip { position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
+           background:#000; border:1px solid #333; padding:3px 7px;
+           border-radius:3px; font-size:11px; white-space:nowrap; opacity:0;
+           pointer-events:none; transition:opacity .12s; z-index:2; }
+  .sp:hover .sptip { opacity:1; }
+  .spfoot { padding-left:108px; font-size:11px; color:#6E6E6E; margin-top:6px;
+            font-variant-numeric:tabular-nums; }
   .legend { display:flex; gap:16px; margin-top:26px; font-size:11.5px;
             color:#9A9A9A; flex-wrap:wrap; }
   .legend span { display:flex; align-items:center; gap:6px; }
@@ -328,6 +539,7 @@ _TEMPLATE = """<!DOCTYPE html>
   .empty { color:#8A8A8A; }
 </style></head><body>
   <h1>Signal History</h1>
+  $health
   <div class="sub">Last $span · one line per day · generated $generated</div>
   $strips
   <div class="axis"><div class="day"></div>
@@ -335,6 +547,9 @@ _TEMPLATE = """<!DOCTYPE html>
       <span>09</span><span>12</span><span>15</span><span>18</span>
       <span>21</span><span>24:00</span></div>
     <div class="note"></div></div>
+
+  <h2>Is the line worth it?</h2>
+  $speed
 
   <h2>When it tends to go</h2>
   <div class="headline">$headline</div>

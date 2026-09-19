@@ -19,10 +19,12 @@ combination is the point:
 | Red bar only | The router refused the login | Check `.env`; if those are right, reboot |
 | Grey | Paused, another task has the router, or the session was taken | Nothing — it clears itself |
 
-Click it — either button — for the menu: the verdict in two short lines, then
-Open Router Portal, the device tasks, Refresh now, Pause, Start with Windows and
-Signal History. Hover for the numbers. Those tasks come from the same table that
-builds the Explorer menu and the Jump List, so all three stay in step.
+**Left-click** opens Signal History — it costs nothing, needs no router session
+and works while the line is down, which is when you want it. **Right-click** is
+the menu: the verdict in two short lines, then Open Router Portal, the device
+tasks, Refresh now, Pause and Start with Windows. Hover for the numbers. Those
+tasks come from the same table that builds the Explorer menu and the Jump List,
+so all three stay in step.
 
 It never pops up a notification — the colour is the notification. Changes worth
 keeping still go to the log: the link dropping, coming back, re-attaching, and
@@ -47,6 +49,24 @@ the link was unusable, and which one is worst. That is the part you can plan
 around: if the tower's backup gives out around eight most evenings, this says so
 in one line instead of a feeling.
 
+### Speed checks and the health number
+
+Every Speed Check records what fast.com settles on. They are irregular by nature
+— you run one when you want one — so they are kept in their own CSV and shown as
+a run of readings against a **15 Mbps** bar: the point where calls stop hurting
+and ordinary use stops waiting on the network.
+
+The page opens with a single **network health** figure, 0–100, because two
+independent things decide whether a line is worth its money:
+
+| | |
+|---|---|
+| **availability** | share of watched minutes the link was usable (weighted 0.6) |
+| **speed** | average against the 15 Mbps bar — hitting it scores 75, not 100 (weighted 0.4) |
+
+Both are printed beside the number. A score with its workings hidden is one
+nobody can act on.
+
 The view reads only the CSV. It never touches the router, so it needs no session
 and works fine while the line is down — which is when you'd want it.
 
@@ -68,6 +88,18 @@ silently evicts the first. Opening the router always wins: any task that logs in
 claims a named mutex for its whole flow, and the monitor will not log back in
 while that is held. It drops its session, shows grey, and picks up afterwards.
 Losing the readout for a minute is fine; being the reason a reboot fails is not.
+
+Against a person with the portal open — who holds no mutex — repeated evictions
+back off, doubling to a four-minute ceiling, rather than fighting for the slot.
+
+One firmware quirk is worth knowing, because it is not guessable. The router
+hands out a cookie for a login **even when its one slot is still occupied**, so
+the login appears to succeed and every request on it returns the logout stub.
+Measured: three plain re-logins in a row all came back 362 bytes; one
+`/logout.cgi` with the dead cookie, then the same login, returned 4,752 bytes of
+data. So the evicted cookie is kept and spent on the way into the next login.
+Without that, every drop cost minutes of blindness until the firmware timed the
+ghost session out; with it, a drop costs one 30-second sample.
 
 ## Setup
 

@@ -203,6 +203,10 @@ class LteSession:
         self._user   = username
         self._pass   = password
         self._cookie = None
+        # The cookie of a session we have been thrown out of. Kept, not
+        # discarded, because it is the only thing that can free the slot it is
+        # still occupying — see login().
+        self._stale  = None
 
     @property
     def live(self):
@@ -210,7 +214,21 @@ class LteSession:
 
     def login(self):
         """Open a session. Evicts whoever currently holds one — by design, the
-        caller decides when that is allowed."""
+        caller decides when that is allowed.
+
+        First, give back any session we hold or have been thrown out of. This
+        is not tidiness, it is the whole difference between working and not:
+        the router issues a cookie for a login even when its single slot is
+        still taken, so the login *appears* to succeed and then every request
+        made with that cookie comes back as the logout stub. Measured against
+        the live router: three plain re-logins in a row all returned 362 bytes;
+        one /logout.cgi with the dead cookie, then the same login, returned
+        4,752 bytes of data. Dropping the dead cookie without spending it is
+        what left the slot occupied until the firmware timed it out minutes
+        later.
+        """
+        self._release()
+
         status, headers, page = _request(self._host, "GET", "/login.cgi")
         if status != 200:
             raise LoginRefused("login page returned HTTP %s" % status)
@@ -257,18 +275,25 @@ class LteSession:
         if status != 200:
             raise RouterUnreachable("lteStatus.cgi returned HTTP %s" % status)
         if _is_evicted(page):
-            self._cookie = None
+            # Keep the cookie as stale rather than dropping it: it is the key
+            # to the slot this dead session still holds, and login() spends it.
+            self._stale, self._cookie = self._cookie, None
             raise Evicted("session taken over by another login")
         return parse(page)
 
     def logout(self):
-        """Release the single session slot so someone else can have it.
+        """Release the single session slot so someone else can have it."""
+        self._release()
 
-        Best effort on purpose: this runs on the way out, including while
-        yielding to a foreground task that is already waiting, and failing to
-        log out politely must never delay or break that handover.
+    def _release(self):
+        """Hand back whichever session we are still on the hook for.
+
+        Best effort on purpose: this runs on the way out, before every login,
+        and while yielding to a foreground task that is already waiting. A
+        failure to log out politely must never delay or break any of those.
         """
-        cookie, self._cookie = self._cookie, None
+        cookie = self._cookie or self._stale
+        self._cookie = self._stale = None
         if not cookie:
             return
         try:
