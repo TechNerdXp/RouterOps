@@ -39,6 +39,11 @@ tray's own menu) opens the last 7 days as one page in an app-mode window, the
 same way the router portal opens — **one line per day**, midnight to midnight,
 coloured by the same scheme as the icon.
 
+Asking for it again does not open a second copy: the page is rebuilt from the
+CSV and the window already on screen is raised, re-reading the file as it comes
+back to the front. One window, however many times it is clicked — and the one
+you get is always current, not whenever you first opened it.
+
 Underneath it is a plain CSV at `%LOCALAPPDATA%\RouterOps\signal-history.csv`,
 one row per sample, pruned to 30 days (~150 KB/day). Each minute takes the
 *worst* state seen in it, so a 40-second drop still shows up instead of being

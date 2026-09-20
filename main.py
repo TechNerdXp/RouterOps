@@ -474,6 +474,100 @@ class _InstanceGuard:
             _KERNEL32.CloseHandle(handle)
 
 
+# ── windows that outlive the process that opened them ─────────────────────────
+# The instance guard above dies with the process, which is the right lifetime
+# for a task but the wrong one for the Signal History window: that window is
+# handed to Chrome and this process exits seconds later, so by the time the user
+# clicks Signal History again there is nothing left holding a claim and a second
+# window opens beside the first. The window itself is the only thing that
+# outlives the launch, so the window is what gets asked.
+#
+# Matched on its exact title rather than anything sturdier because there is
+# nothing sturdier to match on: the browser is not ours, its process is shared
+# with every other Chrome window, and the one thing we do control is what the
+# page calls itself. history.PAGE_TITLE is that name, kept in one place.
+
+_SW_RESTORE = 9
+
+# Declared rather than left to ctypes' defaults: a bare call passes handles as
+# 32-bit ints, which raises on any handle above 0x7FFFFFFF. That failure would
+# land inside the guards below and turn a click into a silent no-op — the one
+# outcome worse than the second window this replaces.
+_U32 = ctypes.WinDLL("user32", use_last_error=True)
+_ENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
+_U32.EnumWindows.argtypes             = [_ENUMPROC, wintypes.LPARAM]
+_U32.IsWindowVisible.argtypes         = [wintypes.HWND]
+_U32.GetWindowTextLengthW.argtypes    = [wintypes.HWND]
+_U32.GetWindowTextW.argtypes          = [wintypes.HWND, wintypes.LPWSTR, ctypes.c_int]
+_U32.IsIconic.argtypes                = [wintypes.HWND]
+_U32.ShowWindow.argtypes              = [wintypes.HWND, ctypes.c_int]
+_U32.GetForegroundWindow.restype      = wintypes.HWND
+_U32.SetForegroundWindow.argtypes     = [wintypes.HWND]
+_U32.BringWindowToTop.argtypes        = [wintypes.HWND]
+_U32.GetWindowThreadProcessId.argtypes = [wintypes.HWND, wintypes.LPDWORD]
+_U32.GetWindowThreadProcessId.restype = wintypes.DWORD
+_U32.AttachThreadInput.argtypes       = [wintypes.DWORD, wintypes.DWORD, wintypes.BOOL]
+
+
+def _find_window(title):
+    """HWND of the visible top-level window with exactly this title, or None."""
+    found = []
+
+    @_ENUMPROC
+    def visit(hwnd, _lparam):
+        if not _U32.IsWindowVisible(hwnd):
+            return True
+        length = _U32.GetWindowTextLengthW(hwnd)
+        if not length:
+            return True
+        buf = ctypes.create_unicode_buffer(length + 1)
+        _U32.GetWindowTextW(hwnd, buf, length + 1)
+        if buf.value != title:
+            return True
+        found.append(hwnd)
+        return False  # stop at the first
+
+    try:
+        _U32.EnumWindows(visit, 0)
+    except Exception:  # never let looking for a window stop us opening one
+        return None
+    return found[0] if found else None
+
+
+def _raise_window(hwnd):
+    """Bring someone else's window to the front, and un-minimise it first.
+
+    SetForegroundWindow on its own is not enough here. Windows only grants the
+    foreground to a process that already has it or that received the last input
+    event, and this process has neither: the click landed on the tray icon or
+    the Jump List, and we were started by it. The call then fails silently, the
+    window stays where it was, and the click looks like it did nothing — which
+    is the complaint this whole path exists to fix. Borrowing the foreground
+    thread's input queue for the length of the call is the documented way round
+    it, and it is released immediately.
+    """
+    attached, other, me = False, 0, 0
+    try:
+        if _U32.IsIconic(hwnd):
+            _U32.ShowWindow(hwnd, _SW_RESTORE)
+        foreground = _U32.GetForegroundWindow()
+        if foreground:
+            other = _U32.GetWindowThreadProcessId(foreground, None)
+            me = _KERNEL32.GetCurrentThreadId()
+            if other and other != me:
+                attached = bool(_U32.AttachThreadInput(other, me, True))
+        _U32.SetForegroundWindow(hwnd)
+        _U32.BringWindowToTop(hwnd)
+    except Exception:
+        pass
+    finally:
+        if attached:
+            try:
+                _U32.AttachThreadInput(other, me, False)
+            except Exception:
+                pass
+
+
 # ── claiming the router ───────────────────────────────────────────────────────
 # The B2368-66 keeps exactly one admin session: a second login silently evicts
 # the first. Once the tray monitor is resident it is holding that session most
@@ -790,6 +884,18 @@ def signal_history(days=7):
         return
     log.info("signal history: %d samples, %d speed checks, over %d days",
              len(rows), len(speeds), days)
+
+    # One window, however many times it is asked for. A second copy of a page
+    # built from a local file is never a second thing to look at, and the file
+    # was just rewritten above — so the window already on screen, raised and
+    # re-read, is the page that was asked for. The page reloads itself when it
+    # comes back to the front, which is what makes the raise show tonight's
+    # data rather than whenever the window was first opened.
+    open_already = _find_window(history.PAGE_TITLE)
+    if open_already:
+        _raise_window(open_already)
+        log.info("signal history: already open — raised that window")
+        return
 
     # Opened detached, and then this process is done. The window clock exists
     # for windows pointed at the router — a driven flow still going six minutes

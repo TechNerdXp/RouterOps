@@ -34,6 +34,12 @@ HEALTHY_MBPS = 15.0
 
 SPEED_FIELDS = ("ts", "mbps")
 
+# The window's title, which is also its identity: main.py looks for a window
+# with exactly this name before opening another one. Change it here or not at
+# all — a literal in the template and a literal in the matcher would drift
+# apart, and the symptom would be two windows again.
+PAGE_TITLE = "RouterOps — Signal History"
+
 
 def path_for(log_dir):
     return os.path.join(log_dir, "signal-history.csv")
@@ -357,6 +363,7 @@ def render(rows, days_requested, speed_rows=None):
         health=health,
         span="%d day%s" % (len(days), "" if len(days) == 1 else "s"),
         generated=time.strftime("%a %d %b %H:%M"),
+        title=PAGE_TITLE,
     )
 
 
@@ -469,7 +476,7 @@ def _speed_block(rows):
 
 _TEMPLATE = """<!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8">
-<title>RouterOps — Signal History</title>
+<title>$title</title>
 <style>
   :root { color-scheme: dark; }
   body { margin:0; padding:28px 32px; background:#141414; color:#E8E8E8;
@@ -564,5 +571,17 @@ _TEMPLATE = """<!DOCTYPE html>
     <span><i style="background:#3A3A3A"></i>paused</span>
     <span><i style="background:#242424"></i>not watched</span>
   </div>
+<script>
+  // Clicking Signal History again rewrites this file and raises this window
+  // rather than opening a second one, so the window has to re-read the file to
+  // show what was just written. Coming back to it is the moment that matters:
+  // a page generated at 2am and still on screen at noon is worse than no page,
+  // because it looks current. The delay keeps an ordinary alt-tab from
+  // reloading a page the reader is in the middle of.
+  var loadedAt = Date.now();
+  addEventListener("focus", function () {
+    if (Date.now() - loadedAt > 30000) location.reload();
+  });
+</script>
 </body></html>
 """
