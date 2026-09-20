@@ -371,6 +371,10 @@ def launch(arg):
 
 # ── autostart ─────────────────────────────────────────────────────────────────
 
+def _autostart_command():
+    return '"%s" --tray' % sys.executable
+
+
 def autostart_enabled():
     try:
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
@@ -385,7 +389,7 @@ def set_autostart(on):
         with winreg.CreateKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
             if on:
                 winreg.SetValueEx(k, RUN_VALUE, 0, winreg.REG_SZ,
-                                  '"%s" --tray' % sys.executable)
+                                  _autostart_command())
             else:
                 try:
                     winreg.DeleteValue(k, RUN_VALUE)
@@ -393,6 +397,27 @@ def set_autostart(on):
                     pass
     except OSError:
         pass
+
+
+def refresh_autostart_path():
+    """Re-point an existing autostart entry at wherever the exe now lives.
+
+    The Run value is written once, when the menu item is ticked, and nothing
+    rewrote it afterwards — so moving the app left an entry naming a path that
+    is gone. Nothing reported that: the menu still showed the tick, because the
+    value existed, and the only symptom was no tray icon after a reboot. The
+    context menu and Jump List already rebuild themselves from sys.executable
+    on every launch; this is the one pointer that did not.
+    """
+    if not getattr(sys, "frozen", False):
+        return                      # from source sys.executable is python.exe
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
+            current, _ = winreg.QueryValueEx(k, RUN_VALUE)
+    except OSError:
+        return                      # not enabled — leave it that way
+    if current != _autostart_command():
+        set_autostart(True)
 
 
 # ── the poll thread ───────────────────────────────────────────────────────────
@@ -892,6 +917,7 @@ def run_tray(username, password, log, log_path, menu_groups, history_path):
     passed in rather than imported so this module stays a shell around whatever
     the app decides its tasks are.
     """
+    refresh_autostart_path()
     window = TrayWindow(
         lambda hwnd: Monitor(username, password, hwnd, log, history_path),
         log, log_path, menu_groups)
