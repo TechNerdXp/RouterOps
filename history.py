@@ -32,6 +32,10 @@ DAY = 86400
 # the network — below it the connection still works, it just costs you time.
 HEALTHY_MBPS = 15.0
 
+# How much of the health score availability decides; the rest is speed. See
+# health_score() for why the continuous series gets most of the say.
+AVAILABILITY_WEIGHT = 0.8
+
 SPEED_FIELDS = ("ts", "mbps")
 
 # The window's title, which is also its identity: main.py looks for a window
@@ -217,6 +221,10 @@ _RANK = {state: i for i, state in enumerate(_SEVERITY)}
 
 MINUTES = 1440
 
+# Height of the hour-profile strip in viewBox units. Taller than a day strip
+# because it is a bar chart, not a colour band: the height is the reading.
+HOUR_H = 72
+
 
 def _day_buckets(rows, day_start):
     """One state per minute of this day, or None where nothing was recorded."""
@@ -338,10 +346,27 @@ def render(rows, days_requested, speed_rows=None):
                "bad" if day["down_minutes"] else "good", note))
 
     worst = max(range(24), key=lambda h: profile[h]) if any(profile) else None
-    bars = "".join(
-        '<div class="hr"><div class="hbar" style="height:%.1f%%"></div>'
-        '<div class="hlab">%02d</div><div class="htip">%02d:00 — %.0f%% down</div></div>'
-        % (min(100.0, profile[h]), h, h, profile[h]) for h in range(24))
+
+    # The hour profile is drawn on the same 1440-unit scale as the day strips
+    # and sits in the same row grid, so hour 08 of the profile is directly
+    # under 08:00 of every strip above it. Same axis, same edges — the eye
+    # reads straight down from a red patch to the bar that says how usual it is.
+    hour_rects = []
+    for h in range(24):
+        pct = min(100.0, profile[h])
+        height = max(1.0, HOUR_H * pct / 100.0)
+        hour_rects.append(
+            '<rect x="%d" y="%.1f" width="58" height="%.1f" fill="%s" rx="1">'
+            '<title>%02d:00–%02d:00  unusable %.0f%% of the time watched</title></rect>'
+            % (h * 60 + 1, HOUR_H - height, height,
+               "#E53935" if pct else "#2E2E2E", h, (h + 1) % 24, profile[h]))
+    hour_note = ("" if worst is None else
+                 "worst %02d:00 · %.0f%% down" % (worst, profile[worst]))
+    hour_row = (
+        '<div class="row hours"><div class="day">when it goes</div>'
+        '<svg class="strip hourstrip" viewBox="0 0 1440 %d" preserveAspectRatio="none">%s</svg>'
+        '<div class="note %s">%s</div></div>'
+        % (HOUR_H, "".join(hour_rects), "bad" if hour_note else "", hour_note))
 
     speed  = _speed_block(speed_rows or [])
     health = _health_block(days, speed_rows or [])
@@ -357,7 +382,7 @@ def render(rows, days_requested, speed_rows=None):
         strips="".join(strips) or
                '<p class="empty">No samples recorded yet. Leave the Signal '
                'Monitor running and check back.</p>',
-        bars=bars,
+        hour_row=hour_row if days else "",
         headline=headline,
         speed=speed,
         health=health,
@@ -381,8 +406,12 @@ def health_score(days, speed_rows):
                     capped at 100 so one very fast day cannot pay for a week of
                     outages
 
-    Weighted toward availability, because a connection that is not there is
-    worth nothing regardless of how fast it is when it returns.
+    Weighted heavily toward availability, for two reasons. A connection that is
+    not there is worth nothing regardless of how fast it is when it returns.
+    And the two inputs are not equally trustworthy: availability comes from a
+    sample every 30 s around the clock, speed from a handful of checks run
+    whenever someone felt like it — a small, self-selected series should not
+    be able to swing the number much.
     """
     watched = sum(d["seen_minutes"] for d in days)
     if not watched and not speed_rows:
@@ -403,18 +432,23 @@ def health_score(days, speed_rows):
     elif speed is None:
         score = availability
     else:
-        score = 0.6 * availability + 0.4 * speed
+        score = AVAILABILITY_WEIGHT * availability + (1 - AVAILABILITY_WEIGHT) * speed
     return {
         "score": round(score),
         "availability": availability,
         "speed": speed,
         "mbps": summary["average"] if summary else None,
         "checks": summary["count"] if summary else 0,
+        "healthy_share": summary["healthy_share"] if summary else None,
+        "verdict": summary["verdict"] if summary else None,
         "watched_minutes": watched,
     }
 
 
 def _health_block(days, speed_rows):
+    """The one block that answers "is this line any good": the score, its two
+    inputs, and the verdict on the speed — which used to be a section of its
+    own further down, asking the same question in different words."""
     h = health_score(days, speed_rows)
     if h is None:
         return ""
@@ -422,35 +456,37 @@ def _health_block(days, speed_rows):
     band = "good" if score >= 75 else ("warn" if score >= 50 else "bad")
     parts = []
     if h["availability"] is not None:
-        parts.append("up %.1f%% of the %s watched" % (
+        parts.append("up <b>%.1f%%</b> of the %s watched" % (
             h["availability"], _fmt_minutes(h["watched_minutes"])))
     if h["mbps"] is not None:
-        parts.append("%.1f Mbps average over %d check%s" % (
-            h["mbps"], h["checks"], "" if h["checks"] == 1 else "s"))
+        parts.append("<b>%.1f Mbps</b> average over %d check%s, %.0f%% of them "
+                     "reached %g Mbps" % (
+                         h["mbps"], h["checks"], "" if h["checks"] == 1 else "s",
+                         h["healthy_share"], HEALTHY_MBPS))
     else:
         parts.append("no speed checks yet")
+
+    if h["verdict"] == "healthy":
+        verdict = '<span class="good">Worth it</span> — fast enough for calls and ordinary use.'
+    elif h["verdict"] == "questionable":
+        verdict = ('<span class="bad">Questionable</span> — below %g Mbps on average; '
+                   'calls and loading will suffer.' % HEALTHY_MBPS)
+    else:
+        verdict = "Run a Speed Check to find out whether the line is worth it."
     return ('<div class="health"><div class="score %s">%d</div>'
-            '<div class="hmeta"><div class="hlabel">Network health</div>'
-            '<div class="hparts">%s</div></div></div>'
-            % (band, score, " · ".join(parts)))
+            '<div class="hmeta"><div class="hlabel">Network health · is the line worth it?</div>'
+            '<div class="hparts">%s</div>'
+            '<div class="hverdict">%s</div></div></div>'
+            % (band, score, " · ".join(parts), verdict))
 
 
 def _speed_block(rows):
-    """The speed-check section: the verdict first, the readings under it."""
+    """The speed-check readings. The verdict on them lives in the health block
+    at the top; this is just the run of numbers behind it."""
     summary = speed_summary(rows)
     if not summary:
         return ('<div class="headline">No speed checks recorded yet. Run '
                 'Speed Check and the results collect here.</div>')
-
-    verdict = summary["verdict"]
-    line = ("Average <b>%.1f Mbps</b> over %d check%s — <span class=\"%s\">%s</span>. "
-            "%.0f%% of them reached %g Mbps." % (
-                summary["average"], summary["count"],
-                "" if summary["count"] == 1 else "s",
-                "good" if verdict == "healthy" else "bad",
-                "healthy" if verdict == "healthy"
-                else "questionable, calls and loading will suffer",
-                summary["healthy_share"], HEALTHY_MBPS))
 
     # The bars are scaled to the tallest reading, so the line marking the bar
     # has to sit at the same scale or it is decoration pretending to be a
@@ -465,12 +501,11 @@ def _speed_block(rows):
            time.strftime("%d %b %H:%M", time.localtime(ts)), m)
         for ts, m in rows[-40:])
 
-    return ('<div class="headline">%s</div>'
-            '<div class="speeds"><div class="threshold" style="bottom:%.1f%%">'
+    return ('<div class="speeds"><div class="threshold" style="bottom:%.1f%%">'
             '</div>%s</div>'
             '<div class="spfoot">latest %.1f · best %.1f · worst %.1f Mbps '
-            '· dashed line is %g</div>'
-            % (line, mark, bars, summary["latest"], summary["best"],
+            '· dashed line is %g · run when someone asked for one, not on a schedule</div>'
+            % (mark, bars, summary["latest"], summary["best"],
                summary["worst"], HEALTHY_MBPS))
 
 
@@ -479,10 +514,10 @@ _TEMPLATE = """<!DOCTYPE html>
 <title>$title</title>
 <style>
   :root { color-scheme: dark; }
-  body { margin:0; padding:28px 32px; background:#141414; color:#E8E8E8;
+  body { margin:0; padding:22px 32px; background:#141414; color:#E8E8E8;
          font:14px/1.5 "Segoe UI",system-ui,sans-serif; }
   h1 { font-size:19px; font-weight:600; margin:0 0 2px; }
-  .sub { color:#8A8A8A; font-size:12px; margin-bottom:22px; }
+  .sub { color:#8A8A8A; font-size:12px; margin-bottom:14px; }
   .row { display:flex; align-items:center; gap:12px; margin-bottom:5px; }
   .day { width:96px; flex:none; font-size:12px; color:#B8B8B8;
          text-align:right; font-variant-numeric:tabular-nums; }
@@ -492,27 +527,18 @@ _TEMPLATE = """<!DOCTYPE html>
           font-variant-numeric:tabular-nums; }
   .note.good { color:#4C7A4F; }
   .note.bad  { color:#D98A88; }
-  .axis { display:flex; gap:12px; margin:10px 0 26px; }
+  .axis { display:flex; gap:12px; margin:8px 0 10px; }
   .axis .day { width:96px; }
   .ticks { flex:1; display:flex; justify-content:space-between;
            font-size:11px; color:#6E6E6E; font-variant-numeric:tabular-nums; }
   .axis .note { width:190px; }
   h2 { font-size:14px; font-weight:600; margin:28px 0 4px; }
-  .headline { color:#C9C9C9; font-size:12.5px; margin-bottom:14px; }
-  .hours { display:flex; gap:3px; align-items:flex-end; height:92px;
-           padding-left:108px; }
-  .hr { flex:1; display:flex; flex-direction:column; justify-content:flex-end;
-        align-items:center; height:100%; position:relative; }
-  .hbar { width:100%; background:linear-gradient(#E53935,#8E1B1B);
-          border-radius:2px 2px 0 0; min-height:2px; }
-  .hlab { font-size:10px; color:#6E6E6E; margin-top:4px;
-          font-variant-numeric:tabular-nums; }
-  .htip { position:absolute; bottom:100%; left:50%; transform:translateX(-50%);
-          background:#000; border:1px solid #333; padding:3px 7px;
-          border-radius:3px; font-size:11px; white-space:nowrap;
-          opacity:0; pointer-events:none; transition:opacity .12s; }
-  .hr:hover .htip { opacity:1; }
-  .health { display:flex; align-items:center; gap:16px; margin:14px 0 20px; }
+  .headline { color:#C9C9C9; font-size:12.5px; margin-bottom:10px; }
+  .row.hours { margin-top:10px; }
+  .hourstrip { height:72px; background:transparent; }
+  .hourstrip rect:hover { fill:#FF6F6A; }
+  .row.hours .day { color:#8A8A8A; }
+  .health { display:flex; align-items:center; gap:16px; margin:10px 0 14px; }
   .score { font-size:34px; font-weight:600; line-height:1; min-width:72px;
            text-align:center; padding:12px 10px; border-radius:8px;
            font-variant-numeric:tabular-nums; }
@@ -521,13 +547,17 @@ _TEMPLATE = """<!DOCTYPE html>
   .score.bad  { background:#3B1B1B; color:#EE8E8B; }
   .hlabel { font-size:13px; font-weight:600; color:#DCDCDC; }
   .hparts { font-size:12px; color:#8A8A8A; margin-top:2px; }
+  .hparts b { color:#C9C9C9; font-weight:600; }
+  .hverdict { font-size:12.5px; color:#C9C9C9; margin-top:6px; }
+  .hverdict span { font-weight:600; }
   .good { color:#6FBF73; }
   .bad  { color:#E87B78; }
-  .speeds { display:flex; gap:4px; align-items:flex-end; height:90px;
-            padding-left:108px; position:relative; margin-top:12px; }
-  .threshold { position:absolute; left:108px; right:0; bottom:0; border-top:1px
+  h2.minor { font-size:13px; color:#B8B8B8; margin-top:22px; }
+  .speeds { display:flex; gap:4px; align-items:flex-end; height:48px;
+            padding:0 202px 0 108px; position:relative; margin-top:12px; }
+  .threshold { position:absolute; left:108px; right:202px; bottom:0; border-top:1px
                dashed #5A5A5A; pointer-events:none; }
-  .sp { flex:1; max-width:34px; display:flex; flex-direction:column;
+  .sp { flex:1; max-width:22px; display:flex; flex-direction:column;
         justify-content:flex-end; height:100%; position:relative; }
   .spbar { width:100%; border-radius:2px 2px 0 0; min-height:2px; }
   .spbar.good { background:linear-gradient(#4CAF50,#357A38); }
@@ -539,7 +569,7 @@ _TEMPLATE = """<!DOCTYPE html>
   .sp:hover .sptip { opacity:1; }
   .spfoot { padding-left:108px; font-size:11px; color:#6E6E6E; margin-top:6px;
             font-variant-numeric:tabular-nums; }
-  .legend { display:flex; gap:16px; margin-top:26px; font-size:11.5px;
+  .legend { display:flex; gap:16px; margin-top:12px; font-size:11.5px;
             color:#9A9A9A; flex-wrap:wrap; }
   .legend span { display:flex; align-items:center; gap:6px; }
   .legend i { width:11px; height:11px; border-radius:2px; display:block; }
@@ -549,18 +579,13 @@ _TEMPLATE = """<!DOCTYPE html>
   $health
   <div class="sub">Last $span · one line per day · generated $generated</div>
   $strips
+  $hour_row
   <div class="axis"><div class="day"></div>
     <div class="ticks"><span>00:00</span><span>03</span><span>06</span>
       <span>09</span><span>12</span><span>15</span><span>18</span>
       <span>21</span><span>24:00</span></div>
     <div class="note"></div></div>
-
-  <h2>Is the line worth it?</h2>
-  $speed
-
-  <h2>When it tends to go</h2>
   <div class="headline">$headline</div>
-  <div class="hours">$bars</div>
 
   <div class="legend">
     <span><i style="background:#4CAF50"></i>connected</span>
@@ -571,6 +596,9 @@ _TEMPLATE = """<!DOCTYPE html>
     <span><i style="background:#3A3A3A"></i>paused</span>
     <span><i style="background:#242424"></i>not watched</span>
   </div>
+
+  <h2 class="minor">Speed checks</h2>
+  $speed
 <script>
   // Clicking Signal History again rewrites this file and raises this window
   // rather than opening a second one, so the window has to re-read the file to

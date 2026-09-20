@@ -49,28 +49,38 @@ one row per sample, pruned to 30 days (~150 KB/day). Each minute takes the
 *worst* state seen in it, so a 40-second drop still shows up instead of being
 averaged away.
 
-Below the strips is an hour-of-day profile across the whole window — which hours
-the link was unusable, and which one is worst. That is the part you can plan
-around: if the tower's backup gives out around eight most evenings, this says so
-in one line instead of a feeling.
+Directly under the strips, on the same axis and the same width, is the
+hour-of-day profile across the whole window — which hours the link was
+unusable, and which one is worst. It shares the strips' scale on purpose: a red
+patch at 20:00 on Tuesday sits straight above the bar that says how usual 20:00
+is. That is the part you can plan around: if the tower's backup gives out
+around eight most evenings, this says so in one line instead of a feeling.
 
-### Speed checks and the health number
+### The health number, and whether the line is worth it
 
-Every Speed Check records what fast.com settles on. They are irregular by nature
-— you run one when you want one — so they are kept in their own CSV and shown as
-a run of readings against a **15 Mbps** bar: the point where calls stop hurting
-and ordinary use stops waiting on the network.
-
-The page opens with a single **network health** figure, 0–100, because two
-independent things decide whether a line is worth its money:
+The page opens with a single **network health** figure, 0–100, and one line
+under it that says whether the line is worth its money. Two independent things
+decide that, and both are printed beside the number — a score with its workings
+hidden is one nobody can act on:
 
 | | |
 |---|---|
-| **availability** | share of watched minutes the link was usable (weighted 0.6) |
-| **speed** | average against the 15 Mbps bar — hitting it scores 75, not 100 (weighted 0.4) |
+| **availability** | share of watched minutes the link was usable (weighted 0.8) |
+| **speed** | average of the speed checks against the 15 Mbps bar — hitting it scores 75, not 100 (weighted 0.2) |
 
-Both are printed beside the number. A score with its workings hidden is one
-nobody can act on.
+Availability carries most of the weight because the two inputs are not equally
+trustworthy. Availability comes from a sample every 30 s around the clock;
+speed comes from a handful of checks run whenever someone felt like running
+one. A small, self-selected series should not be able to swing the number much.
+
+### Speed checks
+
+Every Speed Check records what fast.com settles on. They are irregular by nature
+— you run one when you want one — so they are kept in their own CSV and shown,
+at the foot of the page, as a run of readings against the **15 Mbps** bar: the
+point where calls stop hurting and ordinary use stops waiting on the network.
+The verdict on them is in the health line at the top; the foot is just the
+numbers behind it.
 
 The view reads only the CSV. It never touches the router, so it needs no session
 and works fine while the line is down — which is when you'd want it.
