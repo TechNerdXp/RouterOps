@@ -1,11 +1,11 @@
 """The resident tray readout: RouterOps' first long-lived process.
 
-Everything else in RouterOps is fire-and-exit — a context-menu click starts a
+Everything else in RouterOps is fire-and-exit: a context-menu click starts a
 process, it drives one flow, it dies. This does not, and a process that stays up
 for weeks has to answer for what it does while idle. So, plainly:
 
   Nothing here spins. The UI thread sits in GetMessageW, which parks the thread
-  in the kernel until a message arrives — it is not scheduled and costs nothing
+  in the kernel until a message arrives; it is not scheduled and costs nothing
   while waiting. The poll thread sits in WaitForMultipleObjects with a 30-second
   timeout, which is the same kind of wait: the kernel wakes it on a timer or on
   a signal, whichever comes first. Two blocked threads and ~0.4 s of work a
@@ -20,7 +20,7 @@ this reason. 30 seconds is a deliberate choice against that ceiling.
 ── sharing the router ────────────────────────────────────────────────────────
 The B2368-66 keeps exactly ONE admin session: a second login silently evicts the
 first. So a resident poller and the existing Selenium flows are in direct
-competition for one slot, and the rule is settled — getting into the router wins,
+competition for one slot, and the rule is settled: getting into the router wins,
 the readout yields. It must never be the reason a reboot or a portal login fails.
 
 The arbitration is a named mutex, the same idiom _InstanceGuard already uses in
@@ -32,7 +32,7 @@ dies, however it dies, so there is no state that can wedge the app shut.
 
   This thread claims the same mutex with a zero timeout before each sample. If
   it cannot, the router is someone else's right now: it drops its session and
-  shows "paused" rather than a stale number, and — the important part — does
+  shows "paused" rather than a stale number, and, the important part, does
   not log back in until the mutex is free again. Losing the session is fine.
   Fighting over it mid-reboot is not.
 """
@@ -135,7 +135,7 @@ class POINT(ctypes.Structure):
 
 # Every handle-returning and handle-taking call is declared, without exception.
 # ctypes defaults an undeclared argument to C int, and a HBITMAP or HICON on
-# 64-bit Windows does not fit in one — so an undeclared DeleteObject either
+# 64-bit Windows does not fit in one, so an undeclared DeleteObject either
 # raises on the spot or, worse, silently truncates the handle and frees nothing.
 # That is the difference between a tray icon that runs for weeks and one that
 # leaks GDI objects until the desktop stops drawing.
@@ -230,11 +230,11 @@ kernel32.WaitForMultipleObjects.argtypes = [wintypes.DWORD,
 _COLOURS = {                      # (B, G, R)
     diagnose.OK:        (0x50, 0xAF, 0x4C),   # green
     diagnose.DEGRADED:  (0x00, 0xB3, 0xFF),   # amber
-    diagnose.BACKHAUL:  (0x35, 0x39, 0xE5),   # red — signal fine, internet gone
+    diagnose.BACKHAUL:  (0x35, 0x39, 0xE5),   # red: signal fine, internet gone
     diagnose.NOSERVICE: (0x35, 0x39, 0xE5),   # red
     diagnose.ROUTER:    (0x35, 0x39, 0xE5),   # red
-    diagnose.NOLOGIN:   (0x35, 0x39, 0xE5),   # red — a real problem to fix
-    diagnose.NOSESSION: (0x9E, 0x9E, 0x9E),   # grey — not looking, not broken
+    diagnose.NOLOGIN:   (0x35, 0x39, 0xE5),   # red: a real problem to fix
+    diagnose.NOSESSION: (0x9E, 0x9E, 0x9E),   # grey: not looking, not broken
     diagnose.PAUSED:    (0x9E, 0x9E, 0x9E),   # grey
     diagnose.STARTING:  (0x9E, 0x9E, 0x9E),   # grey
 }
@@ -247,7 +247,7 @@ _EMPTY = (0x60, 0x60, 0x60)       # unlit bar: visible on light and dark taskbar
 #          mid-grey at any real weight sits as heavy as the colour beside it.
 #   dead   every bar, in the state's own colour, when there is no signal at all.
 #          Faint enough never to be mistaken for a reading, strong enough to
-#          still read as red — too light and the worst state of the lot is the
+#          still read as red; too light and the worst state of the lot is the
 #          one that looks most benign on a light taskbar.
 _A_LIT, _A_UNLIT, _A_DEAD = 255, 75, 160
 
@@ -263,7 +263,7 @@ PHI = 1.6180339887
 # Compounding it per bar (3·5·8·13, consecutive Fibonacci) sounds right and
 # looks wrong: over four steps it is a 4.3× spread, so the glyph reads as three
 # stubs standing next to one tower. Making the shortest bar 1/φ² of the tallest
-# — a 2.8× spread — and spacing the two between them evenly gives the climb the
+# (a 2.8× spread) and spacing the two between them evenly gives the climb the
 # eye actually reads as a meter.
 #
 # The tallest is 7/8 of the icon, so the run has air above it instead of
@@ -329,7 +329,7 @@ def make_icon(state, bars):
     ctypes.memmove(bits, bytes(px), len(px))
 
     # The alpha channel does the masking on a 32-bpp icon, so the mask bitmap
-    # only has to exist — but it does have to be deleted, like the colour one.
+    # only has to exist, but it does have to be deleted, like the colour one.
     mask_bmp = gdi32.CreateBitmap(size, size, 1, 1, None)
     info = ICONINFO(True, 0, 0, mask_bmp, colour_bmp)
     hicon = user32.CreateIconIndirect(ctypes.byref(info))
@@ -343,7 +343,7 @@ def make_icon(state, bars):
 def _self_command(arg):
     """Argv to re-run RouterOps with one task arg, frozen or from source.
 
-    `arg` is None for the router portal, which is the plain no-argument launch —
+    `arg` is None for the router portal, which is the plain no-argument launch;
     main() falls through to open_router when it recognises no task. So None has
     to be dropped here rather than appended, or subprocess is handed a None to
     join into a command line and the portal fails to open at all.
@@ -403,7 +403,7 @@ def refresh_autostart_path():
     """Re-point an existing autostart entry at wherever the exe now lives.
 
     The Run value is written once, when the menu item is ticked, and nothing
-    rewrote it afterwards — so moving the app left an entry naming a path that
+    rewrote it afterwards, so moving the app left an entry naming a path that
     is gone. Nothing reported that: the menu still showed the tick, because the
     value existed, and the only symptom was no tray icon after a reboot. The
     context menu and Jump List already rebuild themselves from sys.executable
@@ -415,7 +415,7 @@ def refresh_autostart_path():
         with winreg.OpenKey(winreg.HKEY_CURRENT_USER, RUN_KEY) as k:
             current, _ = winreg.QueryValueEx(k, RUN_VALUE)
     except OSError:
-        return                      # not enabled — leave it that way
+        return                      # not enabled; leave it that way
     if current != _autostart_command():
         set_autostart(True)
 
@@ -535,7 +535,7 @@ class Monitor:
         # tasks; a person logging in from a browser holds no mutex, and against
         # a single-session device our next login throws them out of the page
         # they are reading. Retrying every 30 seconds would be a login war we
-        # would win half of and ruin entirely — so consecutive evictions back
+        # would win half of and ruin entirely, so consecutive evictions back
         # off, doubling, to a ceiling of eight ticks (four minutes). Whoever
         # has the router gets to keep it, and we come back when they are done.
         if self._skip > 0:
@@ -555,7 +555,7 @@ class Monitor:
                 # Give the slot up rather than make them evict us, and never
                 # show a number we can no longer stand behind.
                 self._session.logout()
-                self._log.info("router busy with another task — monitoring paused")
+                self._log.info("router busy with another task; monitoring paused")
             self._publish(diagnose.Assessment(
                 diagnose.PAUSED, "Router in use by another task", "", 0), None)
             return
@@ -566,7 +566,7 @@ class Monitor:
             kernel32.CloseHandle(handle)
 
     def _settle(self, candidate):
-        """Adopt a new verdict once it has held — unless it is bad news.
+        """Adopt a new verdict once it has held, unless it is bad news.
 
         Radio measurements wander continuously, so a link parked on a threshold
         flips class on every sample. This one sits almost exactly on the SINR
@@ -580,7 +580,7 @@ class Monitor:
         survive two samples before it counts.
 
         The cost is that one tick of a genuine improvement is published under
-        the old verdict — the reading beside it is still the fresh one.
+        the old verdict; the reading beside it is still the fresh one.
         """
         previous = self._assessment
         if candidate.state == previous.state:
@@ -602,7 +602,7 @@ class Monitor:
         mutex, so no RouterOps task is competing, and this firmware does
         sometimes drop a session seconds after issuing it for no reason visible
         from outside. That retry is only worth making when the last read worked
-        — once evictions are repeating, something really is holding the router
+        because once evictions are repeating, something really is holding the router
         and a second login per tick is just a second eviction for whoever has
         it. See _tick for the backoff that goes with this.
         """
@@ -616,8 +616,8 @@ class Monitor:
                 if attempt != attempts[-1]:
                     continue
                 # Most likely a by-hand browser login. Their session, their
-                # router — pick up again when they are done with it.
-                self._log.info("session lost twice — waiting for the next tick")
+                # router; pick up again when they are done with it.
+                self._log.info("session lost twice; waiting for the next tick")
                 return None, "session"
             except lte.LoginRefused as exc:
                 self._log.warning("login refused: %s", exc)
@@ -637,10 +637,10 @@ class Monitor:
             # waiting would only add 30 seconds of blindness to something that
             # heals itself. It is a loss that *keeps* happening that means
             # somebody else is really using the router, and that is what backs
-            # off — doubling, to a ceiling of eight ticks.
+            # off, doubling, to a ceiling of eight ticks.
             self._skip = 0 if self._evictions == 1 else min(2 ** (self._evictions - 2), 8)
             if self._skip:
-                self._log.info("router is someone else's — backing off %d tick%s",
+                self._log.info("router is someone else's; backing off %d tick%s",
                                self._skip, "" if self._skip == 1 else "s")
         elif fault is None:
             if self._evictions:
@@ -660,7 +660,7 @@ class Monitor:
         assessment = self._settle(diagnose.assess(sample, internet, fault))
 
         # Transitions go to the log and nowhere else. The icon's colour is the
-        # notification — a popup every time the link twitches would be the thing
+        # notification; a popup every time the link twitches would be the thing
         # you end up turning off, and then the colour is all you had anyway.
         # The log still accumulates the evidence, so "it has been dropping every
         # twenty minutes since six" stays provable after the fact.
@@ -712,7 +712,7 @@ class TrayWindow:
         self._monitor  = None
 
         # Held as an attribute because ctypes does not keep the trampoline alive
-        # on its own — let it be collected and the first message into the window
+        # on its own; let it be collected and the first message into the window
         # proc jumps into freed memory.
         self._wndproc = WNDPROC(self._on_message)
 
@@ -766,7 +766,7 @@ class TrayWindow:
         ok = shell32.Shell_NotifyIconW(NIM_MODIFY if self._added else NIM_ADD,
                                        ctypes.byref(nid))
         self._added = bool(ok) or self._added
-        # Replace first, then destroy the old one — never the other way round,
+        # Replace first, then destroy the old one, never the other way round,
         # and never skipped: one leaked HICON every 30 s is a GDI handle leak
         # that takes about a day to turn into a visibly broken desktop.
         old, self._icon = self._icon, icon
@@ -798,7 +798,7 @@ class TrayWindow:
         user32.AppendMenuW(menu, MF_SEPARATOR, 0, None)
 
         # The same operations the taskbar pin offers, in the same grouping,
-        # from the same table — see main._tray_menu(). Ids are assigned per
+        # from the same table; see main._tray_menu(). Ids are assigned per
         # render from ID_TASK_BASE up, so nothing here has to know what the
         # tasks are.
         self._task_args = {}
@@ -821,7 +821,7 @@ class TrayWindow:
 
         pt = POINT()
         user32.GetCursorPos(ctypes.byref(pt))
-        # Without this the menu never dismisses when you click away — the
+        # Without this the menu never dismisses when you click away, the
         # documented quirk of showing a popup from a window that is not the
         # foreground window. The WM_NULL afterwards is the other half of it.
         user32.SetForegroundWindow(self._hwnd)
@@ -860,7 +860,7 @@ class TrayWindow:
             if msg == WM_APP_TRAY:
                 # Left opens the history, right opens the menu. The history is
                 # what you reach for the moment the icon changes colour, and it
-                # is free — no router session, no traffic, and it works while
+                # is free: no router session, no traffic, and it works while
                 # the line is down. The portal would be the obvious choice but
                 # it is the rarer errand once the tray is telling you what is
                 # happening, and a speed test spends real bandwidth, which is
@@ -913,7 +913,7 @@ class TrayWindow:
 def run_tray(username, password, log, log_path, menu_groups, history_path):
     """Entry point: build the window, hand it a monitor, pump until Exit.
 
-    `menu_groups` is main._tray_menu() output — the router operations, grouped,
+    `menu_groups` is main._tray_menu() output: the router operations, grouped,
     passed in rather than imported so this module stays a shell around whatever
     the app decides its tasks are.
     """

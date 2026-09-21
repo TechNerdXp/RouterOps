@@ -80,10 +80,10 @@ DEVICES = [
     ),
 ]
 
-# standalone — not tied to any single device
+# standalone: not tied to any single device
 UTILITIES = [
     ("Signal Monitor", "--tray"),
-    ("Signal History", "--history"),
+    ("Network Report", "--history"),
     ("Speed Check",    "--speed-check"),
 ]
 
@@ -139,7 +139,7 @@ class _WindowClock:
         if self._finished.wait(self._ttl):
             return  # the task closed the window first
         self.expired = True
-        log.info("window reached the %d-minute limit — closing it", self._ttl // 60)
+        log.info("window reached the %d-minute limit; closing it", self._ttl // 60)
         safe_quit(self._driver)
 
     def hold(self):
@@ -219,7 +219,7 @@ def register_context_menu():
 
             # Wipe the verbs before rewriting them. They are named by position
             # ("1_speed_check"), so inserting or removing a task renumbers the
-            # rest and the old keys are left behind as duplicate menu entries —
+            # rest and the old keys are left behind as duplicate menu entries;
             # writing over the top only ever adds. Regenerating from empty is
             # the only version that can also delete.
             _reg_delete_tree(HKCU, shell_path)
@@ -239,7 +239,7 @@ def register_context_menu():
                 with winreg.CreateKey(HKCU, f"{shell_path}\\{verb}\\command") as k:
                     winreg.SetValueEx(k, "", 0, winreg.REG_SZ, f'"{exe}" {arg}')
 
-        # Standalone utilities — flat entries outside device submenus
+        # Standalone utilities: flat entries outside device submenus
         util_path = f"{exefile_shell}\\RouterOpsUtils"
         _reg_delete_tree(HKCU, f"{util_path}\\shell")   # same reason as above
         with winreg.CreateKey(HKCU, util_path) as k:
@@ -367,7 +367,7 @@ def register_jump_list():
 # mini_httpd on the B2368-66 omits the Content-Type header on some CGI
 # responses (indexMain.cgi among them) while also sending
 # X-Content-Type-Options: nosniff, so Chrome renders the dashboard HTML as
-# plain text and no DOM ever exists. The markup itself arrives intact —
+# plain text and no DOM ever exists. The markup itself arrives intact;
 # re-injecting it via document.write on the same origin yields a fully
 # working page, since scripts/frames are static files served with correct
 # types. Confirmed live against the router on 2026-08-03.
@@ -401,11 +401,11 @@ def _enter_main_frame(driver, wait):
 
 def _alert(text):
     # Every _alert is terminal for this process, but the dialog blocks until
-    # dismissed — drop the single-instance claim first so an unattended error
+    # dismissed, so drop the single-instance claim first so an unattended error
     # box on screen never keeps the next launch out.
     if _GUARD is not None:
         _GUARD.release()
-    try:  # error icon, topmost, foreground — the exe has no console
+    try:  # error icon, topmost, foreground; the exe has no console
         ctypes.windll.user32.MessageBoxW(None, text, "RouterOps",
                                          0x10 | 0x1000 | 0x10000)
     except Exception:
@@ -418,14 +418,14 @@ def _alert(text):
 # easy to make. Either way two processes would drive their own Chrome into the
 # same router session and interleave.
 #
-# A duplicate launch just disappears — no dialog, no second window, only a log
+# A duplicate launch just disappears: no dialog, no second window, only a log
 # line. Nothing is wrong from the user's side: the task they asked for is
 # already on its way, so the extra click should cost them nothing, not even an
 # OK button.
 #
 # The claim is a *named kernel object*, deliberately not a lock file: Windows
-# destroys it the moment the last handle closes — normal exit, crash, or Task
-# Manager kill alike — so there is no stale lock that can ever wedge the app
+# destroys it the moment the last handle closes (normal exit, crash, or Task
+# Manager kill alike), so there is no stale lock that can ever wedge the app
 # shut, and nothing to clean up by hand.
 
 _KERNEL32 = ctypes.WinDLL("kernel32", use_last_error=True)
@@ -476,9 +476,9 @@ class _InstanceGuard:
 
 # ── windows that outlive the process that opened them ─────────────────────────
 # The instance guard above dies with the process, which is the right lifetime
-# for a task but the wrong one for the Signal History window: that window is
+# for a task but the wrong one for the Network Report window: that window is
 # handed to Chrome and this process exits seconds later, so by the time the user
-# clicks Signal History again there is nothing left holding a claim and a second
+# clicks Network Report again there is nothing left holding a claim and a second
 # window opens beside the first. The window itself is the only thing that
 # outlives the launch, so the window is what gets asked.
 #
@@ -491,7 +491,7 @@ _SW_RESTORE = 9
 
 # Declared rather than left to ctypes' defaults: a bare call passes handles as
 # 32-bit ints, which raises on any handle above 0x7FFFFFFF. That failure would
-# land inside the guards below and turn a click into a silent no-op — the one
+# land inside the guards below and turn a click into a silent no-op, the one
 # outcome worse than the second window this replaces.
 _U32 = ctypes.WinDLL("user32", use_last_error=True)
 _ENUMPROC = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.HWND, wintypes.LPARAM)
@@ -541,7 +541,7 @@ def _raise_window(hwnd):
     foreground to a process that already has it or that received the last input
     event, and this process has neither: the click landed on the tray icon or
     the Jump List, and we were started by it. The call then fails silently, the
-    window stays where it was, and the click looks like it did nothing — which
+    window stays where it was, and the click looks like it did nothing, which
     is the complaint this whole path exists to fix. Borrowing the foreground
     thread's input queue for the length of the call is the documented way round
     it, and it is released immediately.
@@ -573,7 +573,7 @@ def _raise_window(hwnd):
 # the first. Once the tray monitor is resident it is holding that session most
 # of the time, so every flow here that logs in has to say so.
 #
-# The rule is settled and one-sided — getting into the router wins, the readout
+# The rule is settled and one-sided: getting into the router wins, the readout
 # yields. So this is not a negotiation: the claim waits a moment for an in-flight
 # sample to finish (one is ~0.4 s and the monitor only holds the mutex while it
 # runs), then proceeds regardless. Holding it is what matters, because that is
@@ -600,7 +600,7 @@ class _RouterClaim:
                 self._owned = _KERNEL32.WaitForSingleObject(
                     self._handle, self._wait * 1000) == 0  # WAIT_OBJECT_0
                 if not self._owned:
-                    log.info("router claim timed out — proceeding anyway")
+                    log.info("router claim timed out; proceeding anyway")
         except Exception:  # the claim must never be why a task cannot run
             pass
         return self
@@ -626,23 +626,23 @@ def _classify(driver, exc):
     except WebDriverException:
         return ("script", f"browser/driver died mid-task ({exc.__class__.__name__})")
     if net_error:
-        return ("router", f"Chrome shows a network error page at {url} — "
+        return ("router", f"Chrome shows a network error page at {url}: "
                           "router unreachable or its web server is down")
     if plain:
         return ("router", f"page at {url} came without Content-Type and could not "
-                          "be recovered — firmware acting up; power-cycle the router")
+                          "be recovered. Firmware acting up; power-cycle the router")
     if isinstance(exc, TimeoutException):
         if "login.cgi" in url:
-            return ("router", "login not accepted — still on the login page "
+            return ("router", "login not accepted, still on the login page "
                               "(wrong credentials, or the router refused the session)")
-        return ("transient", f"timed out waiting at {url} — router slow or its UI changed")
+        return ("transient", f"timed out waiting at {url}; router slow or its UI changed")
     if isinstance(exc, (StaleElementReferenceException,
                         ElementClickInterceptedException,
                         ElementNotInteractableException)):
-        return ("transient", f"{exc.__class__.__name__} at {url} — "
+        return ("transient", f"{exc.__class__.__name__} at {url}: "
                              "page re-rendered mid-action")
     if isinstance(exc, NoSuchElementException):
-        return ("script", f"element not found at {url} — selector/firmware mismatch")
+        return ("script", f"element not found at {url}: selector/firmware mismatch")
     return ("script", f"{exc.__class__.__name__}: {exc}")
 
 
@@ -713,7 +713,7 @@ def open_router():
     # The claim covers the whole life of the window, not just the login. While
     # someone is reading the router's own pages the session is theirs, and a
     # monitor sample that logged back in would throw them out of the portal they
-    # are standing in — the one thing this app must never do.
+    # are standing in, the one thing this app must never do.
     with _RouterClaim():
         opts = _chrome_options("http://192.168.1.1/login.cgi")
         opts.add_argument("--window-size=1248,768")
@@ -728,7 +728,7 @@ def open_router():
         except Exception as exc:
             kind, detail = _classify(driver, exc)
             log.warning("open-router: failed at '%s' [%s] %s", _CURRENT_STEP, kind, detail)
-            # the window stays up so the state is inspectable — on the same clock
+            # the window stays up so the state is inspectable, on the same clock
             _alert(f"Open router failed at: {_CURRENT_STEP}\n\n[{kind}] {detail}\n\n"
                    f"Log: {LOG_PATH}")
         clock.hold()
@@ -846,7 +846,7 @@ def reboot_tplink():
 # ── signal monitor ────────────────────────────────────────────────────────────
 
 def signal_monitor():
-    """The resident tray readout — RouterOps' only long-lived task.
+    """The resident tray readout, RouterOps' only long-lived task.
 
     Imported here rather than at module scope so that every other flow, which
     exits in seconds, does not pay for loading it. It brings in no third-party
@@ -865,10 +865,26 @@ def signal_monitor():
     log.info("signal monitor: exited")
 
 
-def signal_history(days=7):
+def _report_geometry(width=1240):
+    """(width, height, left, top) for the report window: the full height of
+    the work area (the screen minus the taskbar), centred horizontally."""
+    rect = wintypes.RECT()
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+        ok = ctypes.windll.user32.SystemParametersInfoW(0x0030, 0, ctypes.byref(rect), 0)
+    except Exception:
+        ok = False
+    if not ok:
+        return width, 1000, 40, 0
+    wa_w, wa_h = rect.right - rect.left, rect.bottom - rect.top
+    width = min(width, wa_w)
+    return width, wa_h, rect.left + max(0, (wa_w - width) // 2), rect.top
+
+
+def network_report(days=7):
     """Open what the link has been doing as one page, in an app-mode window.
 
-    Reads only the local CSV — it never touches the router, so it needs no
+    Reads only the local CSV. It never touches the router, so it needs no
     session and no _RouterClaim, and it works perfectly well while the line is
     down, which is exactly when someone would want to look at it.
     """
@@ -882,39 +898,44 @@ def signal_history(days=7):
     except OSError as exc:
         _alert(f"Could not write the history page:\n\n{exc}")
         return
-    log.info("signal history: %d samples, %d speed checks, over %d days",
+    log.info("network report: %d samples, %d speed checks, over %d days",
              len(rows), len(speeds), days)
 
     # One window, however many times it is asked for. A second copy of a page
     # built from a local file is never a second thing to look at, and the file
-    # was just rewritten above — so the window already on screen, raised and
+    # was just rewritten above, so the window already on screen, raised and
     # re-read, is the page that was asked for. The page reloads itself when it
     # comes back to the front, which is what makes the raise show tonight's
     # data rather than whenever the window was first opened.
     open_already = _find_window(history.PAGE_TITLE)
     if open_already:
         _raise_window(open_already)
-        log.info("signal history: already open — raised that window")
+        log.info("network report: already open; raised that window")
         return
 
     # Opened detached, and then this process is done. The window clock exists
-    # for windows pointed at the router — a driven flow still going six minutes
+    # for windows pointed at the router: a driven flow still going six minutes
     # in is stuck, and a leftover login page should not sit in the taskbar. A
     # week of your own history is neither: it is a page to read for as long as
     # reading it takes, and closing it mid-sentence would be the bug.
     #
     # Staying behind to watch it would also mean _WindowClock.hold(), which
-    # asks chromedriver whether the window still exists once a second — around
+    # asks chromedriver whether the window still exists once a second, around
     # 360 round trips per window, to supervise a local file that needs no
     # supervision. Detaching removes the clock, the loop and the driver
     # process together.
+    # As tall as the screen allows, so seven day strips, the hour profile and
+    # the speed checks are all in the frame at once: a report you have to
+    # scroll is one you read half of.
+    width, height, left, top = _report_geometry()
     opts = _chrome_options("file:///" + out.replace("\\", "/"))
-    opts.add_argument("--window-size=1320,880")
+    opts.add_argument("--window-size=%d,%d" % (width, height))
+    opts.add_argument("--window-position=%d,%d" % (left, top))
     opts.add_experimental_option("detach", True)
     from selenium.webdriver.chrome.service import Service
     cd = _find_chromedriver()
     driver = webdriver.Chrome(options=opts, service=Service(cd) if cd else None)
-    log.info("signal history: window opened; leaving it to the reader")
+    log.info("network report: window opened; leaving it to the reader")
 
 
 def _read_fast_com(driver, timeout=120):
@@ -975,7 +996,7 @@ def _tray_menu():
     renderings of one list. Add a device above and it appears in all three;
     restating it here is how they would quietly drift apart instead.
 
-    Flat with separators, the way the Jump List already groups them — the task
+    Flat with separators, the way the Jump List already groups them; the task
     labels carry their own device name, which is what they were renamed for.
     """
     groups = [[("Open Router Portal", None)]]
@@ -1010,7 +1031,7 @@ def main():
         "--reboot-tplink": reboot_tplink,
         "--speed-check":   speed_check,
         "--tray":          signal_monitor,
-        "--history":       signal_history,
+        "--history":       network_report,
     }
     arg = next((a for a in dispatch if a in sys.argv), None)
 

@@ -8,7 +8,7 @@ a = Analysis(
     binaries=[],
     datas=[('.env', '.')],
     # selenium >= 4.4x lazy-loads its webdriver submodules, invisible to
-    # PyInstaller's static analysis — collect them all explicitly
+    # PyInstaller's static analysis; collect them all explicitly
     hiddenimports=["win32timezone"] + collect_submodules("selenium"),
     hookspath=[],
     hooksconfig={},

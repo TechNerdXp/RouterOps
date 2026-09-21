@@ -19,7 +19,7 @@ combination is the point:
 | Red bar only | The router refused the login | Check `.env`; if those are right, reboot |
 | Grey | Paused, another task has the router, or the session was taken | Nothing — it clears itself |
 
-**Left-click** opens Signal History — it costs nothing, needs no router session
+**Left-click** opens the Network Report. It costs nothing, needs no router session
 and works while the line is down, which is when you want it. **Right-click** is
 the menu: the verdict in two short lines, then Open Router Portal, the device
 tasks, Refresh now, Pause and Start with Windows. Hover for the numbers. Those
@@ -32,7 +32,7 @@ moving to a different cell tower. That last one matters most and nothing else
 surfaces it: when `eNB`/`PCI`/`EARFCN` change you have been handed to a
 different tower, which is what makes one request succeed and the next one fail.
 
-## Signal History
+## Network Report
 
 `RouterOps.exe --history` (also in the Network submenu, the Jump List, and the
 tray's own menu) opens the last 7 days as one page in an app-mode window, the
@@ -58,10 +58,11 @@ around eight most evenings, this says so in one line instead of a feeling.
 
 ### The health number, and whether the line is worth it
 
-The page opens with a single **network health** figure, 0–100, and one line
-under it that says whether the line is worth its money. Two independent things
-decide that, and both are printed beside the number — a score with its workings
-hidden is one nobody can act on:
+The page opens with a row of four figures: the **network health** score,
+0–100, the two inputs it is made of, and the worst hour of the day. One line
+under them says whether the line is worth its money. Two independent things
+decide that, and both are printed beside the score, because a score with its
+workings hidden is one nobody can act on:
 
 | | |
 |---|---|

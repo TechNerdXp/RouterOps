@@ -1,6 +1,6 @@
 """Browserless telemetry for the Huawei LTE CPE B2368-66.
 
-The router has no HiLink/JSON API — /api/* is a 404 here — but its CGI UI is
+The router has no HiLink/JSON API (/api/* is a 404 here) but its CGI UI is
 plain form-encoded HTTP, so a session can be held and read without a browser at
 all. That matters for more than tidiness: the firmware's missing Content-Type
 header (the document.write bandage in main.py) is a *browser* problem. Chrome
@@ -13,7 +13,7 @@ resident process, and none of the import weight in the frozen exe.
 
 Measured against the live router, 2026-09-19 (firmware B2368_V100R001C00SPC169):
 one poll is HTTP 200, ~0.40 s, ~4.75 KB. mini_httpd answers HTTP/1.0 and closes
-the socket, so there is no keep-alive to reuse — each poll pays its own TCP+TLS
+the socket, so there is no keep-alive to reuse; each poll pays its own TCP+TLS
 handshake, and that cost is already inside the 0.40 s.
 """
 
@@ -29,12 +29,12 @@ HOST = "192.168.1.1"
 
 # The router presents a self-signed certificate for its own LAN address. There
 # is no CA that could vouch for 192.168.1.1 and no name to match, so verifying
-# is not a thing that can succeed — the same call the existing Selenium path
+# is not a thing that can succeed. It is the same call the existing Selenium path
 # makes with --ignore-certificate-errors.
 _TLS = ssl._create_unverified_context()
 
 _CONNECT_TIMEOUT = 8     # router is one hop away; it answers or it doesn't
-_LOGIN_TIMEOUT   = 45    # login.cgi is slow — the UI itself warns about ~15 s
+_LOGIN_TIMEOUT   = 45    # login.cgi is slow; the UI itself warns about ~15 s
 
 
 class RouterUnreachable(Exception):
@@ -123,7 +123,7 @@ def _uptime_seconds(text):
     """'0 Day(s), 1 Hour(s),38 Minute(s),22 Second(s)' -> 5902.
 
     Worth having as a number rather than a label: this counter resetting is an
-    unambiguous re-attach marker — the link went away and came back — which is
+    unambiguous re-attach marker (the link went away and came back), which is
     exactly the event a tower losing power produces.
     """
     if not text:
@@ -171,7 +171,7 @@ def parse(page):
     The page lays out two label/value pairs per row, so a positional row parser
     would have to know that shape. Reading every cell in order and taking the
     one after each known label does not, which is why it survives the GET (full
-    page) and the POST (refresh fragment) alike — the fragment drops IMEI/IMSI
+    page) and the POST (refresh fragment) alike; the fragment drops IMEI/IMSI
     and a few rows, and nothing here depends on their being present.
     """
     cells = _cells(page)
@@ -194,7 +194,7 @@ class LteSession:
     """One admin session on the router, held open across polls.
 
     Held open because logging in costs seconds and the router tolerates only one
-    session at a time — so the session is a resource to be owned deliberately
+    session at a time, so the session is a resource to be owned deliberately
     and given up politely, not re-established on every read.
     """
 
@@ -205,7 +205,7 @@ class LteSession:
         self._cookie = None
         # The cookie of a session we have been thrown out of. Kept, not
         # discarded, because it is the only thing that can free the slot it is
-        # still occupying — see login().
+        # still occupying; see login().
         self._stale  = None
 
     @property
@@ -213,7 +213,7 @@ class LteSession:
         return self._cookie is not None
 
     def login(self):
-        """Open a session. Evicts whoever currently holds one — by design, the
+        """Open a session. Evicts whoever currently holds one. By design, the
         caller decides when that is allowed.
 
         First, give back any session we hold or have been thrown out of. This
@@ -259,7 +259,7 @@ class LteSession:
         )
         cookie = _session_cookie(headers) or pre
         # A good login answers with a redirect stub to indexMain.cgi. Being sent
-        # anywhere else — or handed the login form back — means refused.
+        # anywhere else, or handed the login form back, means refused.
         if status != 200 or not cookie or "indexMain" not in body:
             raise LoginRefused("router did not open a session (HTTP %s)" % status)
         self._cookie = cookie
