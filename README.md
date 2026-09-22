@@ -137,14 +137,11 @@ required for the browser-driven tasks (reboot, guest mode, portal, speed check).
 ## Build
 
 ```
-pyinstaller --name RouterOps main.py --icon=icon.png --noconsole --onefile
-```
-
-###OR 
-
-```
 pyinstaller RouterOps.spec --clean
 ```
+
+Always the spec: it bundles `.env` and Selenium's lazily loaded submodules,
+and an exe built from a bare `pyinstaller main.py` has neither.
 
 > Requires Chrome for the browser-driven tasks. Selenium Manager is bypassed in
 > favour of the cached ChromeDriver.
@@ -153,7 +150,8 @@ pyinstaller RouterOps.spec --clean
 
 | File | What |
 |---|---|
-| `main.py` | Shell integration (context menu, Jump List), Selenium flows, dispatch |
+| `main.py` | Shell integration (context menu, Jump List), dispatch |
+| `browser.py` | The Selenium flows; loaded only by the tasks that drive Chrome |
 | `lte.py` | Browserless router session and `lteStatus.cgi` parsing — stdlib only |
 | `diagnose.py` | Turning the numbers into a verdict and detecting what changed |
 | `tray.py` | The notification-area icon, its menu, and the sampling loop |

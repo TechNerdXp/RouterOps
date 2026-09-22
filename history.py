@@ -197,7 +197,9 @@ def load(csv_path, days, now=None):
 
 # ── the page ──────────────────────────────────────────────────────────────────
 
-# Same colours the tray icon uses, so the strip and the icon agree.
+# The tray icon's colours, so the strip and the icon agree. The one difference
+# is deliberate: the icon has one red for every kind of outage, and the page,
+# which has room for a legend, gives no-service and the router their own.
 _FILL = {
     diagnose.OK:        "#4CAF50",
     diagnose.DEGRADED:  "#FFB300",
@@ -265,8 +267,14 @@ def _local_midnight(ts):
     return int(time.mktime((t.tm_year, t.tm_mon, t.tm_mday, 0, 0, 0, 0, 0, -1)))
 
 
-def summarise(rows):
-    """Per-day totals plus the hour-of-day profile, both from the same pass."""
+def summarise(rows, days_wanted=None):
+    """Per-day totals plus the hour-of-day profile, both from the same pass.
+
+    `days_wanted` keeps the most recent N calendar days. Seven days back from
+    now starts partway through an eighth date, and trimming that day off the
+    strips afterwards still left it in the hour profile and the worst hour,
+    which then described data the page was not showing.
+    """
     if not rows:
         return [], [0.0] * 24
 
@@ -277,7 +285,10 @@ def summarise(rows):
     hour_bad = [0] * 24
     hour_all = [0] * 24
     days = []
-    for day_start in sorted(by_day):
+    starts = sorted(by_day)
+    if days_wanted:
+        starts = starts[-days_wanted:]
+    for day_start in starts:
         day_rows = by_day[day_start]
         buckets = _day_buckets(day_rows, day_start)
 
@@ -323,8 +334,7 @@ def _fmt_minutes(n):
 
 
 def render(rows, days_requested, speed_rows=None):
-    days, profile = summarise(rows)
-    days = days[-days_requested:] if days_requested else days
+    days, profile = summarise(rows, days_requested)
     speed_rows = speed_rows or []
 
     strips = []

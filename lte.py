@@ -3,7 +3,7 @@
 The router has no HiLink/JSON API (/api/* is a 404 here) but its CGI UI is
 plain form-encoded HTTP, so a session can be held and read without a browser at
 all. That matters for more than tidiness: the firmware's missing Content-Type
-header (the document.write bandage in main.py) is a *browser* problem. Chrome
+header (the document.write bandage in browser.py) is a *browser* problem. Chrome
 sees no type, honours X-Content-Type-Options: nosniff, and renders the markup as
 text. Raw HTTP never looks at the header, so nothing needs recovering. Removing
 the browser removes the bug with it.
@@ -26,6 +26,12 @@ import ssl
 import urllib.parse
 
 HOST = "192.168.1.1"
+
+# The named mutex any RouterOps process holds while it is logged in, because
+# the router has one admin session and a second login evicts the first. The
+# tray takes it for each sample and the browser tasks for a whole flow; see
+# tray.py and browser.py for the two sides of that arrangement.
+ROUTER_MUTEX = "Local\\RouterOps.Router"
 
 # The router presents a self-signed certificate for its own LAN address. There
 # is no CA that could vouch for 192.168.1.1 and no name to match, so verifying

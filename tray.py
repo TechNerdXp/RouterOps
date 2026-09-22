@@ -42,6 +42,7 @@ import os
 import subprocess
 import sys
 import threading
+import time
 import winreg
 from ctypes import wintypes
 
@@ -57,7 +58,6 @@ shell32  = ctypes.WinDLL("shell32",  use_last_error=True)
 LRESULT = ctypes.c_ssize_t
 
 POLL_SECONDS = 30
-ROUTER_MUTEX = "Local\\RouterOps.Router"
 RUN_KEY      = r"Software\Microsoft\Windows\CurrentVersion\Run"
 RUN_VALUE    = "RouterOps"
 
@@ -446,7 +446,8 @@ class Monitor:
             diagnose.STARTING, "Starting up…", "", 0)
         self._sample      = None
         self._prev_sample = None
-        self._down_since  = None
+        self._verdict     = None        # last assessment that was not a gap
+        self._down_since  = None        # time.time() the link was first seen down
         self._paused      = False       # by the user, as opposed to yielding
         self._pending     = None        # a better verdict waiting to be confirmed
         self._evictions   = 0           # consecutive; drives the backoff below
@@ -457,7 +458,14 @@ class Monitor:
 
     def snapshot(self):
         with self._lock:
-            return self._assessment, self._sample, self._down_since, self._paused
+            assessment, sample, paused = self._assessment, self._sample, self._paused
+            down_since = self._down_since
+        # Seconds down, but only while we are looking: a grey icon saying "down
+        # for 20m" would be claiming something it cannot currently see.
+        down = (None if down_since is None
+                or assessment.state in diagnose.INDETERMINATE
+                else time.time() - down_since)
+        return assessment, sample, down, paused
 
     def _publish(self, assessment, sample):
         with self._lock:
@@ -482,15 +490,16 @@ class Monitor:
         kernel32.SetEvent(self._wake)
 
     def toggle_pause(self):
+        """Flip the flag and wake the poll thread, which does the rest.
+
+        Pausing means logging out, and that is a network call of up to five
+        seconds. Made from here it stalled the menu while it ran, and it used
+        the session from the UI thread while the poll thread might be halfway
+        through a sample on the same one. The session belongs to one thread.
+        """
         with self._lock:
             self._paused = not self._paused
-            paused = self._paused
-        if paused:
-            self._session.logout()
-            self._publish(diagnose.Assessment(
-                diagnose.PAUSED, "Monitoring paused", "", 0), None)
-        else:
-            self.refresh_now()
+        self.refresh_now()
 
     def shutdown(self):
         self.stop()
@@ -500,8 +509,13 @@ class Monitor:
     # -- the loop --------------------------------------------------------------
 
     def _run(self):
-        history.prune(self._history)      # once, on the way in
+        pruned_at = 0.0
         while True:
+            # On the way in and then once a day. The monitor runs for weeks at a
+            # time, and pruning only at start let the file outgrow its 30 days.
+            if time.time() - pruned_at >= history.DAY:
+                history.prune(self._history)
+                pruned_at = time.time()
             try:
                 self._tick()
             except Exception as exc:              # a sample must never kill the thread
@@ -528,8 +542,12 @@ class Monitor:
 
     def _tick(self):
         with self._lock:
-            if self._paused:
-                return
+            paused = self._paused
+        if paused:
+            self._session.logout()        # a no-op once nothing is held
+            self._publish(diagnose.Assessment(
+                diagnose.PAUSED, "Monitoring paused", "", 0), None)
+            return
 
         # Sitting out. The router mutex only arbitrates between RouterOps' own
         # tasks; a person logging in from a browser holds no mutex, and against
@@ -540,12 +558,15 @@ class Monitor:
         # has the router gets to keep it, and we come back when they are done.
         if self._skip > 0:
             self._skip -= 1
+            # Still a tick of watching nothing, and recorded as one, so the
+            # report shows these minutes as paused rather than as a blank.
+            self._publish(self._assessment, None)
             return
 
         # Claim the router, or stand down. Zero timeout: if a foreground task
         # holds it we want the answer now, not to queue behind a two-minute
         # reboot. Losing here is a normal outcome, not an error.
-        handle = kernel32.CreateMutexW(None, False, ROUTER_MUTEX)
+        handle = kernel32.CreateMutexW(None, False, lte.ROUTER_MUTEX)
         if not handle:
             return
         owned = kernel32.WaitForSingleObject(handle, 0) == WAIT_OBJECT_0
@@ -656,8 +677,8 @@ class Monitor:
         if sample and (sample.get("status") or "").upper().startswith("LTE"):
             internet = lte.internet_reachable()
 
-        previous = self._assessment
         assessment = self._settle(diagnose.assess(sample, internet, fault))
+        now = time.time()
 
         # Transitions go to the log and nowhere else. The icon's colour is the
         # notification; a popup every time the link twitches would be the thing
@@ -668,21 +689,30 @@ class Monitor:
         # Only transitions are written. At two samples a minute, a line each
         # would fill the 256 KB rotation inside a day and bury the events that
         # matter underneath the ones that don't.
-        for kind, text in diagnose.transitions(assessment, previous,
+        #
+        # Judged against the last real verdict, not the last tick. A pause or a
+        # lost session between two verdicts is a gap in watching, and comparing
+        # with the gap itself swallowed the event on its far side: a reboot's
+        # pause followed by "Router not answering" logged no "lost", so the
+        # "restored" that ended it had nothing before it (2026-09-21 14:48).
+        for kind, text in diagnose.transitions(assessment, self._verdict,
                                                sample, self._prev_sample):
-            if kind == "restored" and self._down_since:
+            if kind == "restored" and self._down_since is not None:
                 # Recorded here rather than left to the reader to subtract two
                 # timestamps: how long it was out is the fact worth keeping.
+                # By the clock, not by counting ticks: a tick during an outage
+                # runs long while the probe waits out its timeouts, and counting
+                # 30 s a tick logged a 53-minute outage as 44.
                 text = "%s (down for %s)" % (
-                    text, diagnose.human_duration(self._down_since))
+                    text, diagnose.human_duration(now - self._down_since))
             self._log.info("%s: %s", kind, text)
 
-        if assessment.usable:
-            self._down_since = None
-        elif self._down_since is None:
-            self._down_since = 0
-        else:
-            self._down_since += POLL_SECONDS
+        if assessment.state not in diagnose.INDETERMINATE:
+            self._verdict = assessment
+            if assessment.usable:
+                self._down_since = None
+            elif self._down_since is None:
+                self._down_since = now
 
         if sample:
             self._prev_sample = sample

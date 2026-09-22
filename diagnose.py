@@ -106,17 +106,21 @@ class Assessment:
 def _cell_of(sample):
     """The cell we are camped on, or None when we are not camped on one.
 
-    The modem reports eNB 0 and EARFCN 0 while it is detached. That is the
-    absence of a cell, not a different one, so reading it as a handover turns
-    every service drop into a spurious pair of "moved to a different cell"
-    lines (one on the way out and one on the way back) and buries the real
-    handover in the noise. Observed exactly that during a 53-minute outage:
-    eight cell-change lines, of which one was a genuine move.
+    The modem reports eNB 0 and EARFCN 0 while it is detached, and sometimes
+    N/A in all three fields instead. Either is the absence of a cell, not a
+    different one, so reading it as a handover turns every service drop into a
+    spurious pair of "moved to a different cell" lines (one on the way out
+    and one on the way back) and buries the real handover in the noise.
+    Observed exactly that during a 53-minute outage: eight cell-change lines,
+    of which one was a genuine move; and the N/A form on 2026-09-22, four
+    lines of "eNB 830762→N/A" and back in five minutes. PCI 0 is a real PCI,
+    so only N/A rules that one out.
     """
     enb = (sample.get("enb") or "").strip()
     pci = (sample.get("pci") or "").strip()
     earfcn = (sample.get("earfcn") or "").strip()
-    if not (enb and pci and earfcn) or enb == "0" or earfcn == "0":
+    if not (enb and pci and earfcn) or "N/A" in (enb, pci, earfcn) \
+            or enb == "0" or earfcn == "0":
         return None
     return (enb, pci, earfcn)
 
@@ -209,7 +213,13 @@ def assess(sample, internet, fault=None):
 # seconds would train them to ignore the thing entirely.
 
 def transitions(now, prev, now_sample, prev_sample):
-    """What changed between two assessments. Returns a list of (kind, text)."""
+    """What changed between two assessments. Returns a list of (kind, text).
+
+    `prev` is the last verdict that was a verdict, not whatever the previous
+    tick happened to be: the tray skips the gaps (paused, session lost) when it
+    chooses what to compare against, so a change that straddles a gap is
+    still seen.
+    """
     events = []
     if prev is None:
         return events

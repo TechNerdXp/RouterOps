@@ -52,7 +52,8 @@ it on tray start. Keep that property if you touch autostart.
 
 | File | What |
 |---|---|
-| `main.py` | Shell integration, Selenium flows, arg dispatch. The only entry point. |
+| `main.py` | Shell integration, the single-instance guard, arg dispatch. The only entry point. |
+| `browser.py` | Every Selenium flow: portal, reboots, guest mode, speed check, the report window. Imported only by the task that runs it, so the tray never loads Selenium (~9 MB). Keep it that way. |
 | `lte.py` | Browserless router session, `lteStatus.cgi` parsing. **stdlib only** — keep it that way; it is what makes the resident process cheap. |
 | `diagnose.py` | Numbers → a verdict (BACKHAUL / NOSERVICE / DEGRADED / ROUTER). |
 | `tray.py` | The icon, its menu, the 30 s sampling loop. The only long-lived process. |
