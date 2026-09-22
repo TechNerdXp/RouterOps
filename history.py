@@ -328,7 +328,7 @@ def render(rows, days_requested, speed_rows=None):
     speed_rows = speed_rows or []
 
     strips = []
-    for day in reversed(days):            # newest at the top
+    for day in days:                      # oldest at the top, so it reads downwards
         rects = []
         for start, length, state in day["runs"]:
             fill = _NODATA if state is None else _FILL.get(state, _NODATA)
